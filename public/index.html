@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FacturApp</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark" id="brandMark">
+        <img id="brandMarkImg" src="" alt="" style="display:none">
+        <span id="brandMarkLetter">F</span>
+      </div>
+      <div class="brand-text">
+        <strong id="brandName">FacturApp</strong>
+        <span id="tasaBadge" class="tasa-badge">USD --</span>
+      </div>
+    </div>
+    <nav class="tabs">
+      <button class="tab-btn active" data-tab="clientes">Clientes</button>
+      <button class="tab-btn" data-tab="productos">Productos</button>
+      <button class="tab-btn" data-tab="stock">Stock <span id="stockAlertBadge" class="nav-badge" style="display:none">0</span></button>
+      <button class="tab-btn" data-tab="manoobra">Mano de obra</button>
+      <button class="tab-btn" data-tab="factura">Factura</button>
+      <button class="tab-btn" data-tab="presupuesto">Presupuesto</button>
+      <button class="tab-btn" data-tab="historial">Historial</button>
+      <button class="tab-btn" data-tab="agenda">Agenda</button>
+      <button class="tab-btn" data-tab="balance">Balance</button>
+      <button class="tab-btn" data-tab="negocio">Mi negocio</button>
+    </nav>
+  </aside>
+
+  <main class="content">
+
+    <!-- CLIENTES -->
+    <section id="tab-clientes" class="tab-panel active">
+      <header class="panel-header">
+        <h1>Clientes</h1>
+        <div class="header-actions">
+          <button class="btn btn-ghost" onclick="ImportCSV.abrir('clientes')">⇪ Importar CSV</button>
+          <button class="btn btn-primary" onclick="Clientes.abrirNuevo()">+ Nuevo cliente</button>
+        </div>
+      </header>
+      <div class="toolbar">
+        <input type="search" id="clientesBuscar" placeholder="Buscar por nombre, apellido, documento o N° de cliente...">
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>N°</th><th>Nombre</th><th>Apellido</th><th>Documento</th><th>Teléfono</th><th>Localidad</th><th>Provincia</th><th></th>
+          </tr></thead>
+          <tbody id="clientesTbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- PRODUCTOS -->
+    <section id="tab-productos" class="tab-panel">
+      <header class="panel-header">
+        <h1>Productos</h1>
+        <div class="header-actions">
+          <button class="btn btn-ghost" onclick="ImportCSV.abrir('productos')">⇪ Importar CSV</button>
+          <button class="btn btn-ghost" onclick="Productos.recalcular()">↻ Actualizar cotización</button>
+          <button class="btn btn-primary" onclick="Productos.abrirNuevo()">+ Nuevo producto</button>
+        </div>
+      </header>
+      <div class="toolbar">
+        <input type="search" id="productosBuscar" placeholder="Buscar producto...">
+      </div>
+      <div id="productosGrid" class="cards-grid"></div>
+    </section>
+
+    <!-- STOCK -->
+    <section id="tab-stock" class="tab-panel">
+      <header class="panel-header">
+        <h1>Stock</h1>
+      </header>
+      <div id="stockAlertBanner"></div>
+      <div class="toolbar">
+        <input type="search" id="stockBuscar" placeholder="Buscar producto...">
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Producto</th><th>Stock actual</th><th>Stock mínimo</th><th>Estado</th><th></th></tr></thead>
+          <tbody id="stockTbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- MANO DE OBRA -->
+    <section id="tab-manoobra" class="tab-panel">
+      <header class="panel-header">
+        <h1>Mano de obra</h1>
+        <div class="header-actions">
+          <button class="btn btn-ghost" onclick="ImportCSV.abrir('manoobra')">⇪ Importar CSV</button>
+          <button class="btn btn-ghost" onclick="ManoObra.recalcular()">↻ Actualizar cotización</button>
+          <button class="btn btn-primary" onclick="ManoObra.abrirNuevo()">+ Nuevo ítem</button>
+        </div>
+      </header>
+      <div class="toolbar">
+        <input type="search" id="manoobraBuscar" placeholder="Buscar por descripción...">
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Descripción</th><th>Precio USD</th><th>Precio ARS</th><th></th></tr></thead>
+          <tbody id="manoobraTbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- FACTURA -->
+    <section id="tab-factura" class="tab-panel">
+      <header class="panel-header"><h1>Nueva factura</h1></header>
+      <div id="docForm-factura"></div>
+    </section>
+
+    <!-- PRESUPUESTO -->
+    <section id="tab-presupuesto" class="tab-panel">
+      <header class="panel-header"><h1>Nuevo presupuesto</h1></header>
+      <div id="docForm-presupuesto"></div>
+    </section>
+
+    <!-- HISTORIAL -->
+    <section id="tab-historial" class="tab-panel">
+      <header class="panel-header">
+        <h1>Historial</h1>
+      </header>
+      <div class="toolbar">
+        <select id="historialTipo">
+          <option value="">Todos</option>
+          <option value="factura">Facturas</option>
+          <option value="presupuesto">Presupuestos</option>
+        </select>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Tipo</th><th>N°</th><th>Cliente</th><th>Fecha</th><th>Forma de pago</th><th>Total</th><th></th></tr></thead>
+          <tbody id="historialTbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- AGENDA -->
+    <section id="tab-agenda" class="tab-panel">
+      <header class="panel-header">
+        <h1>Agenda de turnos</h1>
+        <button class="btn btn-primary" onclick="Agenda.abrirNuevo()">+ Reservar turno</button>
+      </header>
+      <div class="agenda-nav">
+        <button class="btn btn-ghost btn-sm" onclick="Agenda.cambiarDia(-1)">‹ Día anterior</button>
+        <input type="date" id="agendaFecha">
+        <button class="btn btn-ghost btn-sm" onclick="Agenda.cambiarDia(1)">Día siguiente ›</button>
+        <button class="btn btn-ghost btn-sm" onclick="Agenda.hoy()">Hoy</button>
+      </div>
+      <div id="agendaLista" class="agenda-lista"></div>
+    </section>
+
+    <!-- BALANCE -->
+    <section id="tab-balance" class="tab-panel">
+      <header class="panel-header"><h1>Balance</h1></header>
+      <div class="toolbar balance-toolbar">
+        <select id="balanceAnio"></select>
+        <select id="balanceMes">
+          <option value="">Todo el año</option>
+          <option value="01">Enero</option><option value="02">Febrero</option><option value="03">Marzo</option>
+          <option value="04">Abril</option><option value="05">Mayo</option><option value="06">Junio</option>
+          <option value="07">Julio</option><option value="08">Agosto</option><option value="09">Septiembre</option>
+          <option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option>
+        </select>
+        <button class="btn btn-primary btn-sm" onclick="Balance.cargar()">Ver</button>
+      </div>
+      <div id="balanceContenido"></div>
+    </section>
+
+    <!-- NEGOCIO -->
+    <section id="tab-negocio" class="tab-panel">
+      <header class="panel-header"><h1>Mi negocio</h1></header>
+      <div class="form-card">
+        <div class="form-grid">
+          <label>Nombre del negocio
+            <input id="cfg_nombre" type="text">
+          </label>
+          <label>CUIT
+            <input id="cfg_cuit" type="text">
+          </label>
+          <label>Dirección
+            <input id="cfg_direccion" type="text">
+          </label>
+          <label>Teléfono
+            <input id="cfg_telefono" type="text">
+          </label>
+          <label>Email
+            <input id="cfg_email" type="email">
+          </label>
+          <label>IVA por defecto (%)
+            <input id="cfg_iva" type="number" step="0.01">
+          </label>
+          <label>Recargo / ganancia por defecto (%)
+            <input id="cfg_recargo" type="number" step="0.01" min="0">
+          </label>
+        </div>
+        <p class="hint">El recargo por defecto se sugiere automáticamente al cargar un producto nuevo (podés cambiarlo para cada uno).</p>
+
+        <div class="divider"></div>
+        <h3>Cotización del dólar</h3>
+        <div class="form-grid">
+          <label>Modo
+            <select id="cfg_tasa_modo">
+              <option value="auto">Automático (dolarapi.com, oficial)</option>
+              <option value="manual">Manual</option>
+            </select>
+          </label>
+          <label>Valor manual (si aplica)
+            <input id="cfg_tasa_manual" type="number" step="0.01">
+          </label>
+        </div>
+        <p class="hint" id="tasaInfo"></p>
+
+        <div class="divider"></div>
+        <h3>Apariencia</h3>
+        <p class="hint">Personalizá el nombre y los colores de la aplicación. Se aplican al instante y se guardan para todos los que usen esta app.</p>
+        <label style="max-width:320px;margin-bottom:14px">Nombre de la aplicación
+          <input type="text" id="cfg_app_nombre" placeholder="FacturApp">
+        </label>
+        <div class="form-grid cols-3">
+          <label>Color principal (botones y acentos)
+            <input type="color" id="cfg_tema_acento" class="color-input">
+          </label>
+          <label>Color de la barra lateral
+            <input type="color" id="cfg_tema_sidebar" class="color-input">
+          </label>
+          <label>Color de fondo
+            <input type="color" id="cfg_tema_fondo" class="color-input">
+          </label>
+        </div>
+        <button class="btn btn-ghost btn-sm" style="margin-top:10px" onclick="Negocio.restaurarColores()">Restaurar colores por defecto</button>
+
+        <div class="divider"></div>
+        <h3>Logo</h3>
+        <p class="hint">Se usa en tus facturas/presupuestos y también reemplaza el ícono de la barra lateral.</p>
+        <div class="upload-row">
+          <img id="logoPreview" class="preview-img" alt="">
+          <input type="file" id="cfg_logo_file" accept="image/*">
+        </div>
+
+        <div class="divider"></div>
+        <h3>Imagen de fondo (marca de agua en PDF)</h3>
+        <div class="upload-row">
+          <img id="fondoPreview" class="preview-img" alt="">
+          <input type="file" id="cfg_fondo_file" accept="image/*">
+        </div>
+
+        <div class="divider"></div>
+        <button class="btn btn-primary" onclick="Negocio.guardar()">Guardar cambios</button>
+        <span id="negocioGuardadoMsg" class="save-msg"></span>
+
+        <div class="divider"></div>
+        <h3>Backup y restauración</h3>
+        <p class="hint">Descargá una copia completa de todos tus datos (clientes, productos, mano de obra, facturas, presupuestos, stock, agenda y configuración) junto con tus imágenes (logo, fondo y fotos de productos). Guardá el archivo en un lugar seguro fuera del NAS.</p>
+        <button class="btn btn-ghost" onclick="Backup.exportar()">⬇ Descargar backup completo</button>
+
+        <div class="divider"></div>
+        <p class="hint" style="color:var(--danger)">Restaurar un backup <strong>reemplaza todos los datos actuales</strong> por los del archivo. Esta acción no se puede deshacer.</p>
+        <div class="upload-row">
+          <input type="file" id="backupArchivo" accept=".zip">
+          <button class="btn btn-danger" onclick="Backup.importar()">Restaurar backup</button>
+        </div>
+        <p id="backupEstado" class="hint"></p>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- MODAL genérico -->
+<div id="modalOverlay" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modalTitle"></h2>
+      <button class="modal-close" onclick="Modal.cerrar()">&times;</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

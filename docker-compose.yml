@@ -1,0 +1,14 @@
+services:
+  facturapp:
+    build: .
+    container_name: facturapp
+    restart: unless-stopped
+    ports:
+      - "8080:3000"          # Cambiá el 8080 si ese puerto ya lo usa otra app en tu NAS
+    volumes:
+      - ./data:/app/data           # Base de datos (persistente)
+      - ./uploads:/app/uploads     # Imágenes de productos, logo y fondo (persistente)
+    environment:
+      - PORT=3000
+      - DATA_DIR=/app/data
+      - UPLOAD_DIR=/app/uploads

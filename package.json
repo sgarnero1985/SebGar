@@ -1,0 +1,17 @@
+{
+  "name": "facturapp",
+  "version": "1.0.0",
+  "description": "App autohospedada de clientes, productos, mano de obra, facturas y presupuestos",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "multer": "^2.0.1",
+    "pdfkit": "^0.15.0",
+    "node-fetch": "^2.7.0",
+    "cors": "^2.8.5",
+    "adm-zip": "^0.5.16"
+  }
+}
