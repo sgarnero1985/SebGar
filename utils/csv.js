@@ -73,4 +73,19 @@ function pick(obj, keys) {
   return '';
 }
 
-module.exports = { parseCSV, normalizeHeader, pick };
+function csvField(v) {
+  if (v === null || v === undefined) return '';
+  const s = String(v);
+  if (/[",;\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+
+// columns: [{ header: 'Nombre', value: row => row.nombre }, ...]
+// devuelve el texto CSV (con BOM al inicio para que Excel abra bien los acentos)
+function toCSV(columns, rows) {
+  const header = columns.map(c => csvField(c.header)).join(',');
+  const lines = rows.map(row => columns.map(c => csvField(c.value(row))).join(','));
+  return '\uFEFF' + [header, ...lines].join('\r\n');
+}
+
+module.exports = { parseCSV, normalizeHeader, pick, toCSV };

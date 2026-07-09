@@ -2,7 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const db = require('../db');
 const currency = require('../currency');
-const { parseCSV, pick } = require('../utils/csv');
+const { parseCSV, pick, toCSV } = require('../utils/csv');
 const router = express.Router();
 
 const uploadCsv = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
@@ -104,6 +104,18 @@ router.post('/import', uploadCsv.single('csv'), async (req, res) => {
   }
 
   res.json({ ok: true, creados, actualizados, errores });
+});
+
+router.get('/export', (req, res) => {
+  const rows = db.prepare('SELECT * FROM mano_obra ORDER BY descripcion').all();
+  const csv = toCSV([
+    { header: 'descripcion', value: r => r.descripcion },
+    { header: 'precio_usd', value: r => r.precio_usd },
+    { header: 'precio_ars', value: r => r.precio_ars }
+  ], rows);
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="mano_obra.csv"');
+  res.send(csv);
 });
 
 module.exports = router;

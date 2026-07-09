@@ -199,6 +199,24 @@ const ImportCSV = {
   }
 };
 
+// ============ EXPORTAR CSV ============
+const ExportCSV = {
+  endpoints: {
+    clientes: '/api/clientes/export',
+    productos: '/api/productos/export',
+    manoobra: '/api/mano-obra/export'
+  },
+  descargar(tipo) {
+    const url = this.endpoints[tipo];
+    if (!url) return;
+    const a = document.createElement('a');
+    a.href = url;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+};
+
 // ============ CLIENTES ============
 const Clientes = {
   data: [],

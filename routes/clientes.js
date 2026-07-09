@@ -1,7 +1,7 @@
 const express = require('express');
 const multer = require('multer');
 const db = require('../db');
-const { parseCSV, pick } = require('../utils/csv');
+const { parseCSV, pick, toCSV } = require('../utils/csv');
 const router = express.Router();
 
 const uploadCsv = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
@@ -25,6 +25,25 @@ router.get('/', (req, res) => {
     rows = db.prepare('SELECT * FROM clientes ORDER BY numero_cliente DESC').all();
   }
   res.json(rows);
+});
+
+router.get('/export', (req, res) => {
+  const rows = db.prepare('SELECT * FROM clientes ORDER BY numero_cliente').all();
+  const csv = toCSV([
+    { header: 'numero_cliente', value: r => r.numero_cliente },
+    { header: 'nombre', value: r => r.nombre },
+    { header: 'apellido', value: r => r.apellido },
+    { header: 'doc_tipo', value: r => r.doc_tipo },
+    { header: 'doc_numero', value: r => r.doc_numero },
+    { header: 'telefono', value: r => r.telefono },
+    { header: 'direccion', value: r => r.direccion },
+    { header: 'localidad', value: r => r.localidad },
+    { header: 'provincia', value: r => r.provincia },
+    { header: 'pais', value: r => r.pais }
+  ], rows);
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="clientes.csv"');
+  res.send(csv);
 });
 
 router.get('/:id', (req, res) => {

@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const db = require('../db');
 const currency = require('../currency');
-const { parseCSV, pick } = require('../utils/csv');
+const { parseCSV, pick, toCSV } = require('../utils/csv');
 
 const router = express.Router();
 
@@ -47,6 +47,22 @@ router.get('/', (req, res) => {
     rows = db.prepare('SELECT * FROM productos ORDER BY id DESC').all();
   }
   res.json(conPrecioFinalLista(rows));
+});
+
+router.get('/export', (req, res) => {
+  const rows = conPrecioFinalLista(db.prepare('SELECT * FROM productos ORDER BY nombre').all());
+  const csv = toCSV([
+    { header: 'nombre', value: r => r.nombre },
+    { header: 'precio_usd', value: r => r.precio_usd },
+    { header: 'precio_ars', value: r => r.precio_ars },
+    { header: 'recargo_pct', value: r => r.recargo_pct },
+    { header: 'precio_final_ars', value: r => r.precio_final_ars },
+    { header: 'stock_actual', value: r => r.stock_actual },
+    { header: 'stock_minimo', value: r => r.stock_minimo }
+  ], rows);
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="productos.csv"');
+  res.send(csv);
 });
 
 router.get('/:id', (req, res) => {
