@@ -104,13 +104,21 @@ router.get('/:id', (req, res) => {
   // --- Tabla de ítems ---
   cursorY += 15;
   const colX = { desc: 40, cant: 300, punit: 360, total: 460 };
-  pdf.font('Helvetica-Bold').fontSize(9).fillColor('#fff');
-  pdf.rect(40, cursorY, pageW - 80, 18).fill('#333');
-  pdf.fillColor('#fff').text('Descripción', colX.desc + 5, cursorY + 5)
-    .text('Cant.', colX.cant, cursorY + 5)
-    .text('P. Unit.', colX.punit, cursorY + 5)
-    .text('Total', colX.total, cursorY + 5);
-  cursorY += 18;
+  const descWidth = colX.cant - colX.desc - 10; // ancho disponible para la descripción antes de la columna "Cant."
+  const tablaTop = 40;
+  const tablaBottom = pageH - 90; // deja lugar para totales/pie en la misma página cuando es posible
+
+  function dibujarEncabezadoTabla(y) {
+    pdf.font('Helvetica-Bold').fontSize(9).fillColor('#fff');
+    pdf.rect(40, y, pageW - 80, 18).fill('#333');
+    pdf.fillColor('#fff').text('Descripción', colX.desc + 5, y + 5)
+      .text('Cant.', colX.cant, y + 5)
+      .text('P. Unit.', colX.punit, y + 5)
+      .text('Total', colX.total, y + 5);
+    return y + 18;
+  }
+
+  cursorY = dibujarEncabezadoTabla(cursorY);
 
   pdf.font('Helvetica').fontSize(9).fillColor('#000');
   const moneda = doc.moneda || 'ARS';
@@ -118,11 +126,22 @@ router.get('/:id', (req, res) => {
     const cant = Number(it.cantidad || 1);
     const punit = Number(it.precio_unit || 0);
     const totalItem = cant * punit;
-    const rowH = 18;
-    pdf.text(`${it.descripcion}${it.tipo ? ` (${it.tipo})` : ''}`, colX.desc + 5, cursorY + 4, { width: 250 });
-    pdf.text(String(cant), colX.cant, cursorY + 4);
-    pdf.text(fmtMoneda(punit, moneda), colX.punit, cursorY + 4);
-    pdf.text(fmtMoneda(totalItem, moneda), colX.total, cursorY + 4);
+    const descText = `${it.descripcion}${it.tipo ? ` (${it.tipo})` : ''}`;
+    // el renglón se adapta a la cantidad de líneas que necesite la descripción
+    const descHeight = pdf.heightOfString(descText, { width: descWidth });
+    const rowH = Math.max(18, descHeight + 8);
+
+    if (cursorY + rowH > tablaBottom) {
+      pdf.addPage();
+      cursorY = dibujarEncabezadoTabla(tablaTop);
+      pdf.font('Helvetica').fontSize(9).fillColor('#000');
+    }
+
+    const otrasColsY = cursorY + (rowH - 10.4) / 2; // centra verticalmente cant./precios cuando el renglón crece
+    pdf.text(descText, colX.desc + 5, cursorY + 4, { width: descWidth });
+    pdf.text(String(cant), colX.cant, otrasColsY);
+    pdf.text(fmtMoneda(punit, moneda), colX.punit, otrasColsY);
+    pdf.text(fmtMoneda(totalItem, moneda), colX.total, otrasColsY);
     pdf.moveTo(40, cursorY + rowH).lineTo(pageW - 40, cursorY + rowH).strokeColor('#eee').stroke();
     cursorY += rowH;
   }

@@ -217,6 +217,107 @@ const ExportCSV = {
   }
 };
 
+// ============ CÓDIGO DE BARRAS (Code 128, sin dependencias) ============
+// Tabla estándar Code 128 (ISO/IEC 15417): cada valor 0-105 son 6 dígitos de ancho
+// (barra,espacio,barra,espacio,barra,espacio en módulos), el valor 106 es el patrón de STOP (7 dígitos).
+const Barcode128 = {
+  TABLE: [
+    "212222","222122","222221","121223","121322","131222","122213",
+    "122312","132212","221213","221312","231212","112232","122132",
+    "122231","113222","123122","123221","223211","221132","221231",
+    "213212","223112","312131","311222","321122","321221","312212",
+    "322112","322211","212123","212321","232121","111323","131123",
+    "131321","112313","132113","132311","211313","231113","231311",
+    "112133","112331","132131","113123","113321","133121","313121",
+    "211331","231131","213113","213311","213131","311123","311321",
+    "331121","312113","312311","332111","314111","221411","431111",
+    "111224","111422","121124","121421","141122","141221","112214",
+    "112412","122114","122411","142112","142211","241211","221114",
+    "413111","241112","134111","111242","121142","121241","114212",
+    "124112","124211","411212","421112","421211","212141","214121",
+    "412121","111143","111341","131141","114113","114311","411113",
+    "411311","113141","114131","311141","411131","211412","211214",
+    "211232","2331112"
+  ],
+  // codifica con Code Set B (ASCII 32-127: dígitos, letras, mayúsculas/minúsculas y símbolos comunes)
+  encode(str) {
+    if (!str) throw new Error('Código vacío');
+    const values = [104]; // START B
+    for (let i = 0; i < str.length; i++) {
+      const code = str.charCodeAt(i);
+      if (code < 32 || code > 127) throw new Error('Carácter no admitido: ' + str[i]);
+      values.push(code - 32);
+    }
+    let total = values[0];
+    for (let k = 1; k < values.length; k++) total += values[k] * k;
+    values.push(total % 103); // check digit
+    values.push(106); // STOP
+    return values.map(v => this.TABLE[v]).join('');
+  },
+  svg(str, { height = 50, moduleWidth = 2, showText = true } = {}) {
+    const widths = this.encode(str);
+    let x = 0, bar = true, rects = '';
+    for (const ch of widths) {
+      const w = Number(ch) * moduleWidth;
+      if (bar) rects += `<rect x="${x}" y="0" width="${w}" height="${height}" fill="#000"/>`;
+      x += w; bar = !bar;
+    }
+    const totalWidth = x;
+    const textH = showText ? 16 : 0;
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalWidth} ${height + textH}" width="${totalWidth}" height="${height + textH}" style="max-width:100%">
+      <rect x="0" y="0" width="${totalWidth}" height="${height}" fill="#fff"/>
+      ${rects}
+      ${showText ? `<text x="${totalWidth / 2}" y="${height + 12}" font-size="12" text-anchor="middle" font-family="monospace" fill="#000">${esc(str)}</text>` : ''}
+    </svg>`;
+  }
+};
+
+const Barcode = {
+  svgSafe(codigo, opts) {
+    try { return Barcode128.svg(codigo, opts); }
+    catch (e) { return `<p style="color:var(--danger);font-size:12px">No se pudo generar el código de barras (usá letras, números o símbolos simples, sin tildes ni ñ)</p>`; }
+  },
+  mostrarSolo(codigo, nombre) {
+    Modal.abrir('Código de barras', `
+      <div style="text-align:center">${this.svgSafe(codigo, { height: 60, moduleWidth: 2.2 })}</div>
+      <p class="hint" style="text-align:center">${esc(nombre)}</p>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="Modal.cerrar()">Cerrar</button>
+        <button class="btn btn-primary" onclick='Barcode.imprimir(${JSON.stringify(codigo)}, ${JSON.stringify(nombre)})'>🖨 Imprimir etiqueta</button>
+      </div>
+    `);
+  },
+  imprimir(codigo, nombre, cantidad = 1) {
+    this.imprimirVarios([{ codigo_barras: codigo, nombre }], cantidad);
+  },
+  imprimirVarios(productos, cantidadCadaUno = 1) {
+    const win = window.open('', '_blank');
+    if (!win) { toast('Habilitá las ventanas emergentes del navegador para imprimir etiquetas', true); return; }
+    let labels = '';
+    productos.forEach(p => {
+      for (let i = 0; i < cantidadCadaUno; i++) {
+        labels += `<div class="etiqueta">
+          <div class="etiqueta-nombre">${esc(p.nombre)}</div>
+          ${this.svgSafe(p.codigo_barras, { height: 40, moduleWidth: 1.6 })}
+        </div>`;
+      }
+    });
+    win.document.write(`<!DOCTYPE html><html><head><title>Etiquetas</title><meta charset="utf-8">
+      <style>
+        body { font-family: Arial, sans-serif; margin:0; padding:12px; }
+        .hoja { display:flex; flex-wrap:wrap; gap:8px; }
+        .etiqueta { border:1px dashed #999; padding:8px 10px; text-align:center; width:220px; box-sizing:border-box; }
+        .etiqueta-nombre { font-size:12px; font-weight:bold; margin-bottom:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        svg { max-width:100%; height:auto; }
+        @media print { .etiqueta { border:none; page-break-inside:avoid; } }
+      </style>
+      </head><body><div class="hoja">${labels}</div>
+      <script>window.onload = () => { window.print(); };<\/script>
+      </body></html>`);
+    win.document.close();
+  }
+};
+
 // ============ CLIENTES ============
 const Clientes = {
   data: [],
@@ -329,6 +430,7 @@ const Productos = {
           </span>
         </div>
         <div class="prod-card-actions">
+          ${p.codigo_barras ? `<button class="btn btn-ghost btn-sm" onclick='Barcode.mostrarSolo(${JSON.stringify(p.codigo_barras)}, ${JSON.stringify(p.nombre)})'>🏷 Código</button>` : ''}
           <button class="btn btn-ghost btn-sm" onclick="Productos.editar(${p.id})">Editar</button>
           <button class="btn btn-danger btn-sm" onclick="Productos.eliminar(${p.id})">Eliminar</button>
         </div>
@@ -340,6 +442,13 @@ const Productos = {
     const recargoValor = esNuevo ? (recargoDefault ?? 0) : (p.recargo_pct ?? 0);
     return `
       <label>Nombre*<input id="p_nombre" value="${esc(p.nombre)}"></label>
+      <label>Código de barras (opcional)
+        <div style="display:flex;gap:8px">
+          <input id="p_codigo_barras" value="${esc(p.codigo_barras || '')}" placeholder="Escaneá o escribí un código">
+          <button type="button" class="btn btn-ghost btn-sm" onclick="Productos.generarCodigo()">Generar</button>
+        </div>
+      </label>
+      <div id="p_codigo_preview" style="margin:-4px 0 10px"></div>
       <div class="form-grid">
         <label>Precio de costo en USD*<input id="p_precio_usd" type="number" step="0.01" value="${p.precio_usd ?? ''}"></label>
         <label>Recargo / ganancia (%)<input id="p_recargo" type="number" step="0.01" min="0" value="${recargoValor}"></label>
@@ -364,14 +473,42 @@ const Productos = {
     let recargoDefault = 0;
     try { const cfg = await API.get('/api/settings'); recargoDefault = Number(cfg.recargo_pct_default) || 0; } catch (e) {}
     Modal.abrir('Nuevo producto', this.formHTML({}, recargoDefault));
+    this.bindCodigoPreview();
   },
-  editar(id) { Modal.abrir('Editar producto', this.formHTML(this.data.find(x => x.id === id))); },
+  editar(id) {
+    Modal.abrir('Editar producto', this.formHTML(this.data.find(x => x.id === id)));
+    this.bindCodigoPreview();
+  },
+  bindCodigoPreview() {
+    const render = () => {
+      const codigo = val('p_codigo_barras');
+      const box = document.getElementById('p_codigo_preview');
+      if (!codigo) { box.innerHTML = ''; return; }
+      box.innerHTML = Barcode.svgSafe(codigo, { height: 45, moduleWidth: 1.6 }) +
+        `<div style="margin-top:4px"><button type="button" class="btn btn-ghost btn-sm" onclick='Barcode.imprimir(${JSON.stringify(codigo)}, ${JSON.stringify(val("p_nombre") || "Producto")})'>🖨 Imprimir etiqueta</button></div>`;
+    };
+    document.getElementById('p_codigo_barras').addEventListener('input', render);
+    render();
+  },
+  async generarCodigo() {
+    try {
+      const r = await API.get('/api/productos/generar-codigo/nuevo');
+      document.getElementById('p_codigo_barras').value = r.codigo;
+      document.getElementById('p_codigo_barras').dispatchEvent(new Event('input'));
+    } catch (e) { toast(e.message, true); }
+  },
+  imprimirEtiquetas() {
+    const conCodigo = this.data.filter(p => p.codigo_barras);
+    if (!conCodigo.length) return toast('Ningún producto tiene código de barras asignado todavía', true);
+    Barcode.imprimirVarios(conCodigo, 1);
+  },
   async guardar(id) {
     const nombre = val('p_nombre'); const precio_usd = val('p_precio_usd');
     if (!nombre || !precio_usd) return toast('Nombre y precio en USD son obligatorios', true);
     const fd = new FormData();
     fd.append('nombre', nombre); fd.append('precio_usd', precio_usd);
     fd.append('recargo_pct', val('p_recargo') || '0');
+    fd.append('codigo_barras', val('p_codigo_barras') || '');
     if (!id) fd.append('stock_actual', val('p_stock_actual') || '0');
     fd.append('stock_minimo', val('p_stock_minimo') || '0');
     const file = document.getElementById('p_imagen').files[0];
@@ -589,7 +726,9 @@ const DocForm = {
 
           <div class="divider"></div>
           <div class="doc-section-title">Agregar productos</div>
-          <input type="search" id="${tipo}_prodBuscar" placeholder="Buscar producto...">
+          <input type="text" id="${tipo}_prodCodigo" placeholder="📷 Escaneá un código de barras y Enter">
+          <div style="height:6px"></div>
+          <input type="search" id="${tipo}_prodBuscar" placeholder="...o buscá por nombre">
           <div id="${tipo}_prodResultados" class="search-results" style="display:none"></div>
 
           <div style="height:10px"></div>
@@ -657,6 +796,23 @@ const DocForm = {
 
   bindEvents(tipo) {
     const s = this.state[tipo];
+
+    document.getElementById(tipo + '_prodCodigo').addEventListener('keydown', async (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      const input = e.target;
+      const codigo = input.value.trim();
+      if (!codigo) return;
+      try {
+        const p = await API.get('/api/productos/codigo/' + encodeURIComponent(codigo));
+        this.agregarItem(tipo, 'producto', p.id, p.nombre, p.precio_final_ars, p.stock_actual);
+        input.value = '';
+      } catch (err) {
+        toast('No hay ningún producto con ese código', true);
+        input.select();
+      }
+      input.focus();
+    });
 
     document.getElementById(tipo + '_clienteBuscar').addEventListener('input', debounce(async (e) => {
       const q = e.target.value.trim();

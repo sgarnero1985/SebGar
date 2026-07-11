@@ -111,6 +111,10 @@ if (!columnaExiste('productos', 'stock_minimo')) {
 if (!columnaExiste('productos', 'recargo_pct')) {
   db.exec(`ALTER TABLE productos ADD COLUMN recargo_pct REAL NOT NULL DEFAULT 0`);
 }
+if (!columnaExiste('productos', 'codigo_barras')) {
+  db.exec(`ALTER TABLE productos ADD COLUMN codigo_barras TEXT`);
+}
+db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_productos_codigo_barras ON productos(codigo_barras) WHERE codigo_barras IS NOT NULL AND codigo_barras != ''`);
 
 // valores por defecto
 const defaults = {
