@@ -134,6 +134,10 @@ tbody tr:hover { background: #FAF7F2; }
 .save-msg { font-size: 12.5px; color: var(--ok); margin-left: 10px; }
 .upload-row { display: flex; align-items: center; gap: 16px; }
 .preview-img { width: 90px; height: 90px; object-fit: contain; border: 1px solid var(--line); border-radius: 6px; background: #FBFAF7; }
+.checkbox-row { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--ink); cursor: pointer; }
+.checkbox-row input[type=checkbox] { width: 16px; height: 16px; cursor: pointer; }
+.drive-estado-ok { color: var(--ok); }
+.drive-estado-error { color: var(--danger); }
 
 input[type=color].color-input {
   padding: 3px; height: 42px; cursor: pointer; width: 100%;

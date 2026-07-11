@@ -4,32 +4,18 @@ const path = require('path');
 const fs = require('fs');
 const AdmZip = require('adm-zip');
 const db = require('../db');
+const { construirBackupBuffer, TABLAS } = require('../backupUtil');
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 200 * 1024 * 1024 } });
 
 const UPLOAD_ROOT = process.env.UPLOAD_DIR || path.join(__dirname, '..', 'uploads');
 
-// Orden de restauración: primero las tablas "independientes", después las que referencian a otras.
-const TABLAS = ['clientes', 'productos', 'mano_obra', 'stock_movimientos', 'documentos', 'turnos', 'settings'];
-
 router.get('/exportar', (req, res) => {
   try {
-    const data = { version: 1, exportado: new Date().toISOString() };
-    for (const t of TABLAS) {
-      data[t] = db.prepare(`SELECT * FROM ${t}`).all();
-    }
-
-    const zip = new AdmZip();
-    zip.addFile('data.json', Buffer.from(JSON.stringify(data, null, 2), 'utf-8'));
-    if (fs.existsSync(UPLOAD_ROOT)) {
-      zip.addLocalFolder(UPLOAD_ROOT, 'uploads');
-    }
-
-    const buffer = zip.toBuffer();
-    const fecha = new Date().toISOString().slice(0, 10);
+    const { buffer, filename } = construirBackupBuffer();
     res.set('Content-Type', 'application/zip');
-    res.set('Content-Disposition', `attachment; filename="facturapp-backup-${fecha}.zip"`);
+    res.set('Content-Disposition', `attachment; filename="${filename}"`);
     res.send(buffer);
   } catch (e) {
     res.status(500).json({ error: e.message });

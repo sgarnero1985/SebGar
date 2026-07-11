@@ -98,7 +98,7 @@ function switchTab(tab) {
   if (tab === 'historial') Historial.cargar();
   if (tab === 'agenda') Agenda.cargar();
   if (tab === 'balance') Balance.cargar();
-  if (tab === 'negocio') Negocio.cargar();
+  if (tab === 'negocio') { Negocio.cargar(); CuentasCobro.cargar(); DriveBackup.cargar(); }
 }
 
 // ---------- Tasa de cambio (badge) ----------
@@ -1337,6 +1337,77 @@ const Negocio = {
   }
 };
 
+// ============ CUENTAS PARA COBRO (CBU / ALIAS / BILLETERAS) ============
+const CuentasCobro = {
+  data: [],
+  async cargar() {
+    this.data = await API.get('/api/cuentas-cobro');
+    this.pintar();
+  },
+  pintar() {
+    const tbody = document.getElementById('cuentasCobroTbody');
+    if (!this.data.length) {
+      tbody.innerHTML = `<tr class="empty-row"><td colspan="6">Todavía no cargaste ninguna cuenta.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = this.data.map(c => `
+      <tr>
+        <td>${esc(c.empresa)}</td>
+        <td>${esc(c.tipo || 'CBU')}</td>
+        <td>${esc(c.cbu) || '—'}</td>
+        <td>${esc(c.alias) || '—'}</td>
+        <td>${esc(c.titular) || '—'}</td>
+        <td class="row-actions">
+          <button class="btn btn-ghost btn-sm" onclick="CuentasCobro.editar(${c.id})">Editar</button>
+          <button class="btn btn-danger btn-sm" onclick="CuentasCobro.eliminar(${c.id})">Eliminar</button>
+        </td>
+      </tr>
+    `).join('');
+  },
+  formHTML(c = {}) {
+    return `
+      <label>Empresa / Banco / Billetera virtual*<input id="cc_empresa" value="${esc(c.empresa)}" placeholder="Ej: Mercado Pago, Ualá, Banco Galicia..."></label>
+      <label>Tipo
+        <select id="cc_tipo">
+          ${['CBU', 'CVU', 'Alias', 'Otro'].map(t => `<option value="${t}" ${(c.tipo || 'CBU') === t ? 'selected' : ''}>${t}</option>`).join('')}
+        </select>
+      </label>
+      <label>CBU / CVU<input id="cc_cbu" value="${esc(c.cbu)}"></label>
+      <label>Alias<input id="cc_alias" value="${esc(c.alias)}"></label>
+      <label>Titular<input id="cc_titular" value="${esc(c.titular)}"></label>
+      <label>Notas<input id="cc_notas" value="${esc(c.notas)}"></label>
+      <p class="hint">Cargá al menos el CBU/CVU o el alias.</p>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="Modal.cerrar()">Cancelar</button>
+        <button class="btn btn-primary" onclick="CuentasCobro.guardar(${c.id || 'null'})">Guardar</button>
+      </div>
+    `;
+  },
+  abrirNuevo() { Modal.abrir('Nueva cuenta para cobro', this.formHTML()); },
+  editar(id) { Modal.abrir('Editar cuenta', this.formHTML(this.data.find(x => x.id === id))); },
+  async guardar(id) {
+    const empresa = val('cc_empresa');
+    const tipo = document.getElementById('cc_tipo').value;
+    const cbu = val('cc_cbu');
+    const alias = val('cc_alias');
+    const titular = val('cc_titular');
+    const notas = val('cc_notas');
+    if (!empresa) return toast('La empresa / banco / billetera es obligatoria', true);
+    if (!cbu && !alias) return toast('Cargá al menos un CBU/CVU o un alias', true);
+    try {
+      const body = { empresa, tipo, cbu, alias, titular, notas };
+      if (id) await API.put('/api/cuentas-cobro/' + id, body);
+      else await API.post('/api/cuentas-cobro', body);
+      Modal.cerrar(); toast('Cuenta guardada'); this.cargar();
+    } catch (e) { toast(e.message, true); }
+  },
+  async eliminar(id) {
+    if (!confirm('¿Eliminar esta cuenta?')) return;
+    await API.del('/api/cuentas-cobro/' + id);
+    toast('Cuenta eliminada'); this.cargar();
+  }
+};
+
 // ============ BACKUP ============
 const Backup = {
   exportar() {
@@ -1364,6 +1435,75 @@ const Backup = {
       estado.textContent = '';
       toast(e.message, true);
     }
+  }
+};
+
+// ============ BACKUP AUTOMÁTICO A GOOGLE DRIVE ============
+const DriveBackup = {
+  async cargar() {
+    try {
+      const e = await API.get('/api/drive/estado');
+      document.getElementById('drive_habilitado').checked = !!e.habilitado;
+      document.getElementById('drive_folder_id').value = e.folder_id || '';
+      document.getElementById('drive_intervalo_horas').value = e.intervalo_horas || 12;
+      document.getElementById('drive_mantener_cantidad').value = e.mantener_cantidad || 14;
+
+      const partes = [];
+      partes.push(e.configurado
+        ? `✓ Credenciales cargadas (${esc(e.email_cuenta_servicio)})`
+        : 'Todavía no subiste el archivo JSON de la cuenta de servicio.');
+      if (e.ultimo_backup) {
+        const fecha = new Date(e.ultimo_backup).toLocaleString('es-AR');
+        partes.push(e.ultimo_estado === 'error'
+          ? `Último intento (${fecha}) falló: ${e.ultimo_error}`
+          : `Último backup a Drive: ${fecha}`);
+      } else {
+        partes.push('Todavía no se hizo ningún backup a Drive.');
+      }
+      const estadoEl = document.getElementById('driveEstado');
+      estadoEl.innerHTML = partes.join('<br>');
+      estadoEl.className = 'hint' + (e.ultimo_estado === 'error' ? ' drive-estado-error' : e.ultimo_backup ? ' drive-estado-ok' : '');
+    } catch (e) { /* silencioso */ }
+  },
+  async subirCredenciales() {
+    const input = document.getElementById('drive_credenciales_file');
+    const file = input.files[0];
+    if (!file) return null;
+    const fd = new FormData();
+    fd.append('credenciales', file);
+    return API.post('/api/drive/credenciales', fd, true);
+  },
+  async guardar() {
+    try {
+      await this.subirCredenciales();
+      await API.put('/api/drive/config', {
+        habilitado: document.getElementById('drive_habilitado').checked,
+        folder_id: val('drive_folder_id'),
+        intervalo_horas: val('drive_intervalo_horas'),
+        mantener_cantidad: val('drive_mantener_cantidad')
+      });
+      toast('Configuración de Google Drive guardada');
+      document.getElementById('drive_credenciales_file').value = '';
+      this.cargar();
+    } catch (e) { toast(e.message, true); }
+  },
+  async probar() {
+    try {
+      await this.subirCredenciales();
+      await API.put('/api/drive/config', { folder_id: val('drive_folder_id') });
+      const r = await API.post('/api/drive/probar', {});
+      toast(`Conexión OK — carpeta "${r.carpeta}"`);
+      document.getElementById('drive_credenciales_file').value = '';
+      this.cargar();
+    } catch (e) { toast(e.message, true); }
+  },
+  async backupAhora() {
+    toast('Generando backup y subiéndolo a Drive...');
+    try {
+      const r = await API.post('/api/drive/backup-ahora', {});
+      toast(`Backup subido: ${r.filename}`);
+      this.cargar();
+    } catch (e) { toast(e.message, true); }
   }
 };
 

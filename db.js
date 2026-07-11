@@ -95,6 +95,18 @@ db.exec(`
     clave TEXT PRIMARY KEY,
     valor TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS cuentas_cobro (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    empresa TEXT NOT NULL,        -- banco / empresa / billetera virtual (ej: Banco Galicia, Mercado Pago, Ualá)
+    tipo TEXT DEFAULT 'CBU',      -- CBU | Alias | CVU | otro
+    cbu TEXT,
+    alias TEXT,
+    titular TEXT,
+    notas TEXT,
+    orden INTEGER NOT NULL DEFAULT 0,
+    creado TEXT DEFAULT (datetime('now'))
+  );
 `);
 
 // Migración: agrega columnas nuevas si la base ya existía de una versión anterior
@@ -136,7 +148,16 @@ const defaults = {
   tema_sidebar: '#1B2733',
   tema_fondo: '#F7F5F1',
   app_nombre: 'FacturApp',
-  recargo_pct_default: '0'
+  recargo_pct_default: '0',
+  drive_habilitado: '0',
+  drive_folder_id: '',
+  drive_intervalo_horas: '12',
+  drive_service_account: '',
+  drive_service_account_email: '',
+  drive_mantener_cantidad: '14',
+  drive_ultimo_backup: '',
+  drive_ultimo_estado: '',
+  drive_ultimo_error: ''
 };
 
 const getSetting = db.prepare('SELECT valor FROM settings WHERE clave = ?');

@@ -176,6 +176,27 @@ router.get('/:id', (req, res) => {
     cursorY += 18;
   }
 
+  // --- Datos de cobro (CBU / alias / billeteras virtuales) ---
+  if (doc.forma_pago === 'billetera_virtual') {
+    const cuentas = db.prepare('SELECT * FROM cuentas_cobro ORDER BY orden ASC, id ASC').all();
+    if (cuentas.length) {
+      cursorY += 6;
+      if (cursorY > tablaBottom - 20 * cuentas.length) { pdf.addPage(); cursorY = 40; }
+      pdf.font('Helvetica-Bold').fontSize(10).fillColor('#000').text('Datos para transferencia:', 40, cursorY);
+      cursorY += 14;
+      pdf.font('Helvetica').fontSize(9).fillColor('#333');
+      for (const c of cuentas) {
+        const partes = [];
+        if (c.cbu) partes.push(`${c.tipo || 'CBU'}: ${c.cbu}`);
+        if (c.alias) partes.push(`Alias: ${c.alias}`);
+        if (c.titular) partes.push(`Titular: ${c.titular}`);
+        const linea = `${c.empresa}${partes.length ? ' — ' + partes.join(' · ') : ''}`;
+        pdf.text(linea, 40, cursorY, { width: pageW - 80 });
+        cursorY += pdf.heightOfString(linea, { width: pageW - 80 }) + 4;
+      }
+    }
+  }
+
   if (doc.notas) {
     cursorY += 10;
     pdf.font('Helvetica-Oblique').fontSize(9).fillColor('#555').text(doc.notas, 40, cursorY, { width: pageW - 80 });

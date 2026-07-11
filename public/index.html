@@ -263,6 +263,17 @@
         <span id="negocioGuardadoMsg" class="save-msg"></span>
 
         <div class="divider"></div>
+        <h3>Cuentas para cobro (CBU / Alias / billeteras virtuales)</h3>
+        <p class="hint">Cargá los datos de tus cuentas bancarias y billeteras virtuales (Mercado Pago, Ualá, Banco, etc.). Cuando elijas "Billetera virtual" como forma de pago en una factura o presupuesto, estos datos se incluyen automáticamente en el PDF.</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Empresa / Banco / Billetera</th><th>Tipo</th><th>CBU / CVU</th><th>Alias</th><th>Titular</th><th></th></tr></thead>
+            <tbody id="cuentasCobroTbody"></tbody>
+          </table>
+        </div>
+        <button class="btn btn-ghost btn-sm" style="margin-top:10px" onclick="CuentasCobro.abrirNuevo()">+ Agregar cuenta</button>
+
+        <div class="divider"></div>
         <h3>Backup y restauración</h3>
         <p class="hint">Descargá una copia completa de todos tus datos (clientes, productos, mano de obra, facturas, presupuestos, stock, agenda y configuración) junto con tus imágenes (logo, fondo y fotos de productos). Guardá el archivo en un lugar seguro fuera del NAS.</p>
         <button class="btn btn-ghost" onclick="Backup.exportar()">⬇ Descargar backup completo</button>
@@ -274,6 +285,42 @@
           <button class="btn btn-danger" onclick="Backup.importar()">Restaurar backup</button>
         </div>
         <p id="backupEstado" class="hint"></p>
+
+        <div class="divider"></div>
+        <h3>Backup automático a Google Drive</h3>
+        <p class="hint">
+          Conectá una <strong>cuenta de servicio de Google</strong> para que la app suba un backup completo a tu Drive cada cierta cantidad de horas, aunque no tengas la app abierta. Pasos:
+        </p>
+        <ol class="hint" style="margin:0 0 12px 18px;padding:0">
+          <li>Entrá a <a href="https://console.cloud.google.com/iam-admin/serviceaccounts" target="_blank" rel="noopener">Google Cloud Console</a>, creá un proyecto (o usá uno existente) y creá una <strong>cuenta de servicio</strong>.</li>
+          <li>Generale una clave nueva en formato <strong>JSON</strong> y descargala.</li>
+          <li>Habilitá la <strong>Google Drive API</strong> para ese proyecto.</li>
+          <li>En tu Google Drive, creá (o elegí) una carpeta para los backups, compartila con el email de la cuenta de servicio (algo como <code>nombre@proyecto.iam.gserviceaccount.com</code>) dándole permiso de <strong>Editor</strong>, y copiá el ID de la carpeta (lo que aparece en la URL después de <code>/folders/</code>).</li>
+          <li>Subí el JSON acá abajo, pegá el ID de carpeta y activá el backup automático.</li>
+        </ol>
+        <div class="form-grid">
+          <label>Archivo JSON de la cuenta de servicio
+            <input type="file" id="drive_credenciales_file" accept="application/json,.json">
+          </label>
+          <label>ID de la carpeta de Google Drive
+            <input type="text" id="drive_folder_id" placeholder="1AbCdEfGhIjKlMnOpQrStUvWxYz">
+          </label>
+          <label>Cada cuántas horas hacer backup
+            <input type="number" id="drive_intervalo_horas" min="1" step="1" value="12">
+          </label>
+          <label>Cantidad de backups a conservar en Drive
+            <input type="number" id="drive_mantener_cantidad" min="1" step="1" value="14">
+          </label>
+        </div>
+        <label class="checkbox-row" style="margin:10px 0">
+          <input type="checkbox" id="drive_habilitado"> Activar backup automático a Google Drive
+        </label>
+        <div class="header-actions" style="margin-top:6px">
+          <button class="btn btn-ghost" onclick="DriveBackup.probar()">Probar conexión</button>
+          <button class="btn btn-ghost" onclick="DriveBackup.guardar()">Guardar configuración</button>
+          <button class="btn btn-primary" onclick="DriveBackup.backupAhora()">⬆ Hacer backup ahora</button>
+        </div>
+        <p id="driveEstado" class="hint"></p>
       </div>
     </section>
 
