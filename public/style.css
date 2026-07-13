@@ -30,6 +30,15 @@ body { min-height: 100vh; }
   flex-direction: column;
   flex-shrink: 0;
   padding: 20px 14px;
+  min-height: 100vh;
+}
+.sidebar-footer {
+  margin-top: auto;
+  padding: 16px 8px 4px;
+  font-size: 11px;
+  color: #6B7580;
+  text-align: center;
+  border-top: 1px solid rgba(255,255,255,0.08);
 }
 .brand { display: flex; align-items: center; gap: 10px; padding: 6px 8px 24px; }
 .brand-mark {
@@ -50,9 +59,12 @@ body { min-height: 100vh; }
 .tab-btn {
   all: unset; cursor: pointer; padding: 10px 12px; border-radius: 6px;
   color: #C4CDD6; font-size: 13.5px; font-weight: 500;
+  display: flex; align-items: center; gap: 10px;
 }
 .tab-btn:hover { background: rgba(255,255,255,0.06); color: #fff; }
 .tab-btn.active { background: var(--copper); color: #fff; }
+.tab-icon { width: 17px; height: 17px; flex-shrink: 0; opacity: 0.9; }
+.tab-btn span:not(.nav-badge) { flex: 1; text-align: left; }
 
 /* Content */
 .content { flex: 1; padding: 32px 40px; max-width: 1200px; }
