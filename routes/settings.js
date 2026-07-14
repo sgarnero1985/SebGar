@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const settings = require('../settings');
 const currency = require('../currency');
+const db = require('../db');
 
 const router = express.Router();
 
@@ -66,6 +67,45 @@ router.get('/tasa-cambio', async (req, res) => {
   const forzar = req.query.forzar === '1';
   const data = await currency.getTasaCambio(forzar);
   res.json(data);
+});
+
+// Restablece la app a valores de fábrica: borra todos los datos (clientes, productos,
+// facturas/presupuestos, stock, agenda, cuentas de cobro), las imágenes subidas
+// (logo, fondo, fotos de producto) y vuelve la configuración a sus valores por defecto.
+// Acción irreversible, pensada para el botón "Restablecer valores de fábrica".
+router.post('/reset-fabrica', (req, res) => {
+  try {
+    db.exec('PRAGMA foreign_keys = OFF');
+    db.exec('BEGIN');
+    for (const t of db.TABLAS_DATOS) {
+      db.exec(`DELETE FROM ${t}`);
+      db.exec(`DELETE FROM sqlite_sequence WHERE name='${t}'`);
+    }
+    db.exec('DELETE FROM settings');
+    db.exec('COMMIT');
+    db.exec('PRAGMA foreign_keys = ON');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    db.exec('PRAGMA foreign_keys = ON');
+    return res.status(500).json({ error: 'Error al restablecer la base de datos: ' + e.message });
+  }
+
+  const insertSetting = db.prepare('INSERT INTO settings (clave, valor) VALUES (?, ?)');
+  for (const [clave, valor] of Object.entries(db.DEFAULT_SETTINGS)) {
+    insertSetting.run(clave, valor);
+  }
+
+  try {
+    for (const sub of ['products', 'logo']) {
+      const dir = path.join(UPLOAD_ROOT, sub);
+      fs.rmSync(dir, { recursive: true, force: true });
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  } catch (e) {
+    return res.json({ ok: true, avisoImagenes: 'Se restableció la configuración, pero hubo un problema borrando las imágenes: ' + e.message });
+  }
+
+  res.json({ ok: true });
 });
 
 module.exports = router;

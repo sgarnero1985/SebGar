@@ -40,8 +40,13 @@ const uploadCsv = multer({ storage: multer.memoryStorage(), limits: { fileSize: 
 
 router.get('/', (req, res) => {
   const q = (req.query.q || '').trim();
+  const categoria = (req.query.categoria || '').trim();
   let rows;
-  if (q) {
+  if (categoria && q) {
+    rows = db.prepare('SELECT * FROM productos WHERE categoria = ? AND (nombre LIKE ? OR codigo_barras LIKE ?) ORDER BY id DESC').all(categoria, `%${q}%`, `%${q}%`);
+  } else if (categoria) {
+    rows = db.prepare('SELECT * FROM productos WHERE categoria = ? ORDER BY id DESC').all(categoria);
+  } else if (q) {
     rows = db.prepare('SELECT * FROM productos WHERE nombre LIKE ? OR codigo_barras LIKE ? ORDER BY id DESC').all(`%${q}%`, `%${q}%`);
   } else {
     rows = db.prepare('SELECT * FROM productos ORDER BY id DESC').all();
@@ -77,7 +82,12 @@ function digitoVerificadorEAN13(cuerpo12) {
 }
 
 router.get('/export', (req, res) => {
-  const rows = conPrecioFinalLista(db.prepare('SELECT * FROM productos ORDER BY nombre').all());
+  const categoria = (req.query.categoria || '').trim();
+  const rows = conPrecioFinalLista(
+    categoria
+      ? db.prepare('SELECT * FROM productos WHERE categoria = ? ORDER BY nombre').all(categoria)
+      : db.prepare('SELECT * FROM productos ORDER BY nombre').all()
+  );
   const csv = toCSV([
     { header: 'nombre', value: r => r.nombre },
     { header: 'codigo_barras', value: r => r.codigo_barras },
@@ -101,7 +111,7 @@ router.get('/:id', (req, res) => {
 
 router.post('/', upload.single('imagen'), async (req, res) => {
   try {
-    const { nombre, precio_usd, stock_actual, stock_minimo, recargo_pct, codigo_barras } = req.body;
+    const { nombre, precio_usd, stock_actual, stock_minimo, recargo_pct, codigo_barras, categoria } = req.body;
     if (!nombre || precio_usd === undefined) return res.status(400).json({ error: 'Nombre y precio en USD son obligatorios' });
     const codigo = (codigo_barras || '').trim() || null;
     if (codigo && db.prepare('SELECT 1 FROM productos WHERE codigo_barras = ?').get(codigo)) {
@@ -112,9 +122,10 @@ router.post('/', upload.single('imagen'), async (req, res) => {
     const stockInicial = Number(stock_actual) || 0;
     const stockMinimo = Number(stock_minimo) || 0;
     const recargo = Number(recargo_pct) || 0;
+    const cat = (categoria || '').trim() || null;
     const info = db.prepare(`
-      INSERT INTO productos (nombre, imagen, precio_usd, precio_ars, stock_actual, stock_minimo, recargo_pct, codigo_barras) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(nombre, imagen, Number(precio_usd), precio_ars, stockInicial, stockMinimo, recargo, codigo);
+      INSERT INTO productos (nombre, imagen, precio_usd, precio_ars, stock_actual, stock_minimo, recargo_pct, codigo_barras, categoria) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(nombre, imagen, Number(precio_usd), precio_ars, stockInicial, stockMinimo, recargo, codigo, cat);
     if (stockInicial > 0) {
       db.prepare(`INSERT INTO stock_movimientos (producto_id, tipo, cantidad, motivo) VALUES (?, 'entrada', ?, 'Stock inicial')`)
         .run(info.lastInsertRowid, stockInicial);
@@ -130,7 +141,7 @@ router.put('/:id', upload.single('imagen'), async (req, res) => {
   try {
     const existing = db.prepare('SELECT * FROM productos WHERE id = ?').get(req.params.id);
     if (!existing) return res.status(404).json({ error: 'No encontrado' });
-    const { nombre, precio_usd, stock_minimo, recargo_pct, codigo_barras } = req.body;
+    const { nombre, precio_usd, stock_minimo, recargo_pct, codigo_barras, categoria } = req.body;
     let codigo = existing.codigo_barras;
     if (codigo_barras !== undefined) {
       codigo = (codigo_barras || '').trim() || null;
@@ -143,6 +154,7 @@ router.put('/:id', upload.single('imagen'), async (req, res) => {
     const precio_ars = await currency.convertirUsdArs(usd);
     const stockMinimo = stock_minimo !== undefined ? Number(stock_minimo) : existing.stock_minimo;
     const recargo = recargo_pct !== undefined ? Number(recargo_pct) : existing.recargo_pct;
+    const cat = categoria !== undefined ? ((categoria || '').trim() || null) : existing.categoria;
     let imagen = existing.imagen;
     if (req.file) {
       if (existing.imagen) {
@@ -151,8 +163,8 @@ router.put('/:id', upload.single('imagen'), async (req, res) => {
       }
       imagen = `/uploads/products/${req.file.filename}`;
     }
-    db.prepare('UPDATE productos SET nombre=?, imagen=?, precio_usd=?, precio_ars=?, stock_minimo=?, recargo_pct=?, codigo_barras=? WHERE id=?')
-      .run(nombre ?? existing.nombre, imagen, usd, precio_ars, stockMinimo, recargo, codigo, req.params.id);
+    db.prepare('UPDATE productos SET nombre=?, imagen=?, precio_usd=?, precio_ars=?, stock_minimo=?, recargo_pct=?, codigo_barras=?, categoria=? WHERE id=?')
+      .run(nombre ?? existing.nombre, imagen, usd, precio_ars, stockMinimo, recargo, codigo, cat, req.params.id);
     const row = db.prepare('SELECT * FROM productos WHERE id = ?').get(req.params.id);
     res.json(conPrecioFinal(row));
   } catch (e) {
@@ -240,16 +252,18 @@ router.post('/import', uploadCsv.single('csv'), async (req, res) => {
   }
   if (!filas.length) return res.status(400).json({ error: 'El CSV no tiene filas de datos' });
 
+  const categoria = (req.query.categoria || '').trim() || null;
+
   const { tasa } = await currency.getTasaCambio();
 
   const findByNombre = db.prepare('SELECT * FROM productos WHERE LOWER(nombre) = LOWER(?)');
   const findByCodigo = db.prepare('SELECT id FROM productos WHERE codigo_barras = ? AND id != ?');
   const insert = db.prepare(`
-    INSERT INTO productos (nombre, precio_usd, precio_ars, stock_actual, stock_minimo, recargo_pct, codigo_barras)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO productos (nombre, precio_usd, precio_ars, stock_actual, stock_minimo, recargo_pct, codigo_barras, categoria)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const update = db.prepare(`
-    UPDATE productos SET precio_usd=?, precio_ars=?, stock_minimo=?, recargo_pct=?, codigo_barras=? WHERE id=?
+    UPDATE productos SET precio_usd=?, precio_ars=?, stock_minimo=?, recargo_pct=?, codigo_barras=?, categoria=COALESCE(categoria, ?) WHERE id=?
   `);
   const insertMov = db.prepare(`INSERT INTO stock_movimientos (producto_id, tipo, cantidad, motivo) VALUES (?, 'entrada', ?, ?)`);
 
@@ -277,14 +291,14 @@ router.post('/import', uploadCsv.single('csv'), async (req, res) => {
         continue;
       }
       if (existing) {
-        update.run(precio_usd, precio_ars, stock_minimo, recargo_pct, codigo_barras || existing.codigo_barras, existing.id);
+        update.run(precio_usd, precio_ars, stock_minimo, recargo_pct, codigo_barras || existing.codigo_barras, categoria, existing.id);
         if (stock_actual > 0) {
           db.prepare('UPDATE productos SET stock_actual = stock_actual + ? WHERE id = ?').run(stock_actual, existing.id);
           insertMov.run(existing.id, stock_actual, 'Importación CSV');
         }
         actualizados++;
       } else {
-        const info = insert.run(nombre, precio_usd, precio_ars, stock_actual, stock_minimo, recargo_pct, codigo_barras);
+        const info = insert.run(nombre, precio_usd, precio_ars, stock_actual, stock_minimo, recargo_pct, codigo_barras, categoria);
         if (stock_actual > 0) insertMov.run(info.lastInsertRowid, stock_actual, 'Stock inicial (importación CSV)');
         creados++;
       }

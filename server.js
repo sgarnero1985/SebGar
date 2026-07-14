@@ -24,7 +24,6 @@ app.use('/api/balance', require('./routes/balance'));
 app.use('/api/turnos', require('./routes/turnos'));
 app.use('/api/cuentas-cobro', require('./routes/cuentas'));
 app.use('/api/backup', require('./routes/backup'));
-app.use('/api/drive', require('./routes/drive'));
 
 app.get('/health', (req, res) => res.json({ ok: true }));
 
@@ -36,5 +35,3 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`FacturApp escuchando en el puerto ${PORT}`);
 });
-
-require('./driveScheduler').iniciar();

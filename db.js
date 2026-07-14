@@ -34,6 +34,7 @@ db.exec(`
     stock_actual INTEGER NOT NULL DEFAULT 0,
     stock_minimo INTEGER NOT NULL DEFAULT 0,
     recargo_pct REAL NOT NULL DEFAULT 0,
+    categoria TEXT,
     creado TEXT DEFAULT (datetime('now'))
   );
 
@@ -126,6 +127,9 @@ if (!columnaExiste('productos', 'recargo_pct')) {
 if (!columnaExiste('productos', 'codigo_barras')) {
   db.exec(`ALTER TABLE productos ADD COLUMN codigo_barras TEXT`);
 }
+if (!columnaExiste('productos', 'categoria')) {
+  db.exec(`ALTER TABLE productos ADD COLUMN categoria TEXT`);
+}
 db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_productos_codigo_barras ON productos(codigo_barras) WHERE codigo_barras IS NOT NULL AND codigo_barras != ''`);
 
 // valores por defecto
@@ -148,16 +152,7 @@ const defaults = {
   tema_sidebar: '#1B2733',
   tema_fondo: '#F7F5F1',
   app_nombre: 'FacturApp',
-  recargo_pct_default: '0',
-  drive_habilitado: '0',
-  drive_folder_id: '',
-  drive_intervalo_horas: '12',
-  drive_service_account: '',
-  drive_service_account_email: '',
-  drive_mantener_cantidad: '14',
-  drive_ultimo_backup: '',
-  drive_ultimo_estado: '',
-  drive_ultimo_error: ''
+  recargo_pct_default: '0'
 };
 
 const getSetting = db.prepare('SELECT valor FROM settings WHERE clave = ?');
@@ -166,5 +161,8 @@ for (const [k, v] of Object.entries(defaults)) {
   const row = getSetting.get(k);
   if (!row) insertSetting.run(k, v);
 }
+
+db.DEFAULT_SETTINGS = defaults;
+db.TABLAS_DATOS = ['stock_movimientos', 'documentos', 'turnos', 'clientes', 'productos', 'mano_obra', 'cuentas_cobro'];
 
 module.exports = db;

@@ -5,7 +5,7 @@ Aplicación autohospedada para gestionar clientes, productos, mano de obra, fact
 ## Qué incluye
 
 - **Clientes**: nombre, apellido, número de cliente automático, DNI/CUIL/CUIT (opcional), dirección, teléfono, localidad, provincia, país.
-- **Productos**: nombre, imagen, precio en USD con conversión automática a ARS (cotización oficial vía dolarapi.com).
+- **Productos por categoría**: Accesorios, Alarmas, Baterías y pilas, Cables, Cámaras analógicas, Cámaras IP, Conectividad, Fuentes y UPS, Grabadores, Paneles solares, Placa madre, Memoria RAM, Gabinete, Monitor, Periféricos, Procesador, Placa de video y Refrigeración. Cada categoría es una pestaña propia con exactamente las mismas funciones (alta, edición, baja, imagen, precio en USD con conversión automática a ARS, código de barras, importar/exportar CSV, impresión de etiquetas), acotada a los productos de esa categoría.
 - **Stock**: cada producto tiene stock actual y stock mínimo. Al emitir una factura, el stock se descuenta automáticamente; si editás o eliminás la factura, se repone. Podés registrar entradas de mercadería (cuando te entrega tu proveedor) y hacer ajustes manuales (roturas, conteos). La app te avisa (badge en la pestaña + banner) cuando un producto queda en o por debajo del mínimo configurado.
 - **Mano de obra**: descripción, precio en USD y ARS.
 - **Facturas y Presupuestos**: buscador de clientes/productos/mano de obra, IVA configurable, descuento del 10% por pago contado, forma de pago (contado, efectivo, tarjeta, billetera virtual), edición posterior, exportación a PDF con tu logo e imagen de fondo. Los presupuestos no descuentan stock (solo las facturas, al ser ventas confirmadas).
@@ -13,7 +13,7 @@ Aplicación autohospedada para gestionar clientes, productos, mano de obra, fact
 - **Balance**: vista mensual o anual con total facturado, cantidad de facturas, promedio por factura, desglose productos vs. mano de obra, gráfico de barras por mes (vista anual) y totales por forma de pago.
 - **Mi negocio**: datos de tu negocio, logo, imagen de fondo (marca de agua en los PDF), nombre de la app y colores personalizables, y configuración de la cotización del dólar (automática o manual).
 - **Cuentas para cobro**: cargá tus CBU/CVU, alias y las empresas/billeteras virtuales asociadas (Mercado Pago, Ualá, bancos, etc.). Cuando una factura o presupuesto tiene la forma de pago "Billetera virtual", estos datos aparecen automáticamente en el PDF.
-- **Backup automático a Google Drive**: además del backup manual, podés conectar una cuenta de servicio de Google para que la app suba un backup completo a tu Drive cada tantas horas (12 por defecto) de forma totalmente automática, sin que tengas que abrir la app.
+- **Backup manual y restablecimiento de fábrica**: descargá o restaurá un backup completo en cualquier momento, o restablecé toda la app a sus valores originales con un solo botón.
 
 Todo se guarda en una base de datos SQLite local — no necesitas ningún servidor de base de datos aparte.
 
@@ -56,18 +56,9 @@ Para hacer un backup a nivel de archivos, simplemente copiá esas dos carpetas.
 
 **Restaurar un backup:** en la misma sección, elegí el archivo `.zip` y hacé clic en "Restaurar backup". **Esto reemplaza todos los datos actuales** por los del archivo — usalo para recuperarte de una pérdida de datos o para migrar la app a otro NAS. La operación no se puede deshacer, así que si tenés datos actuales que querés conservar, hacé un backup de ellos primero.
 
-### Backup automático a Google Drive
+### Restablecer valores de fábrica
 
-En **Mi negocio → Backup automático a Google Drive** podés dejar que la app suba un backup completo a tu Drive cada cierta cantidad de horas (12 por defecto), sin intervención manual. Usa una **cuenta de servicio** de Google (no tu usuario personal), que es el método pensado para procesos que corren solos en un servidor:
-
-1. Entrá a [Google Cloud Console → Cuentas de servicio](https://console.cloud.google.com/iam-admin/serviceaccounts), creá un proyecto (o usá uno existente) y creá una cuenta de servicio.
-2. Generale una clave nueva en formato **JSON** y descargala. Guardala en un lugar seguro: le da acceso a la carpeta de Drive que compartas con ella.
-3. En el mismo proyecto, habilitá la **Google Drive API** (buscala en "APIs y servicios → Biblioteca").
-4. En tu Google Drive, creá o elegí una carpeta para los backups. Compartila con el email de la cuenta de servicio (termina en `...iam.gserviceaccount.com`) con permiso de **Editor**, y copiá el ID de la carpeta (la parte de la URL después de `/folders/`).
-5. En la app, subí el archivo JSON, pegá el ID de carpeta, elegí cada cuántas horas hacer backup y cuántas copias conservar en Drive (las más viejas se van borrando automáticamente), y activá el interruptor.
-6. Podés probar la conexión o forzar un backup inmediato con los botones correspondientes.
-
-El servidor revisa cada 15 minutos si corresponde hacer el backup según el intervalo configurado, y recuerda el último backup exitoso aunque reiniciés el contenedor (no se te va a acumular ni te va a faltar ningún backup por un reinicio).
+En **Mi negocio → Restablecer valores de fábrica** hay un botón que borra todos los datos (clientes, productos, facturas, presupuestos, stock, agenda y cuentas de cobro), todas las imágenes subidas (logo, fondo, fotos de producto) y devuelve toda la configuración a sus valores originales, dejando la app como recién instalada. Pide doble confirmación porque **no se puede deshacer** — hacé un backup antes si querés conservar algo.
 
 ## Actualizar la app si en el futuro cambiás el código
 

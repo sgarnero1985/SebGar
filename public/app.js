@@ -90,7 +90,7 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + tab));
   if (tab === 'clientes') Clientes.cargar();
-  if (tab === 'productos') Productos.cargar();
+  if (tab.startsWith('prod_')) ProductosCat[tab.slice('prod_'.length)].cargar();
   if (tab === 'stock') Stock.cargar();
   if (tab === 'manoobra') ManoObra.cargar();
   if (tab === 'factura') DocForm.render('factura');
@@ -98,7 +98,7 @@ function switchTab(tab) {
   if (tab === 'historial') Historial.cargar();
   if (tab === 'agenda') Agenda.cargar();
   if (tab === 'balance') Balance.cargar();
-  if (tab === 'negocio') { Negocio.cargar(); CuentasCobro.cargar(); DriveBackup.cargar(); }
+  if (tab === 'negocio') { Negocio.cargar(); CuentasCobro.cargar(); }
 }
 
 // ---------- Tasa de cambio (badge) ----------
@@ -130,19 +130,6 @@ const ImportCSV = {
         ['pais', 'opcional (por defecto Argentina)']
       ],
       ejemplo: 'nombre,apellido,doc_tipo,doc_numero,telefono,localidad,provincia\nJuan,Pérez,DNI,30111222,1155551234,Quilmes,Buenos Aires'
-    },
-    productos: {
-      titulo: 'Importar productos desde CSV',
-      endpoint: '/api/productos/import',
-      recargar: () => { Productos.cargar(); cargarTasaBadge(); },
-      columnas: [
-        ['nombre', 'obligatoria — si coincide con uno existente, lo actualiza'],
-        ['precio_usd', 'obligatoria (precio de costo en USD)'],
-        ['stock_actual', 'opcional (si el producto ya existe, se suma como entrada de mercadería)'],
-        ['stock_minimo', 'opcional'],
-        ['recargo_pct', 'opcional (% de ganancia)']
-      ],
-      ejemplo: 'nombre,precio_usd,stock_actual,stock_minimo,recargo_pct\nAuricular Bluetooth,15.50,10,2,40'
     },
     manoobra: {
       titulo: 'Importar mano de obra desde CSV',
@@ -203,7 +190,6 @@ const ImportCSV = {
 const ExportCSV = {
   endpoints: {
     clientes: '/api/clientes/export',
-    productos: '/api/productos/export',
     manoobra: '/api/mano-obra/export'
   },
   descargar(tipo) {
@@ -405,135 +391,198 @@ document.getElementById('clientesBuscar').addEventListener('input', debounce(() 
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 
 // ============ PRODUCTOS ============
-const Productos = {
-  data: [],
-  async cargar() {
-    const q = document.getElementById('productosBuscar').value.trim();
-    this.data = await API.get('/api/productos' + (q ? '?q=' + encodeURIComponent(q) : ''));
-    this.pintar();
-  },
-  pintar() {
-    const grid = document.getElementById('productosGrid');
-    if (!this.data.length) {
-      grid.innerHTML = `<p style="color:var(--text-mute)">No hay productos todavía. Creá el primero con "+ Nuevo producto".</p>`;
-      return;
+const CATEGORIAS_PRODUCTOS = [
+  { slug: 'accesorios', label: 'Accesorios' },
+  { slug: 'alarmas', label: 'Alarmas' },
+  { slug: 'baterias_pilas', label: 'Baterías y pilas' },
+  { slug: 'cables', label: 'Cables' },
+  { slug: 'camaras_analogicas', label: 'Cámaras analógicas' },
+  { slug: 'camaras_ip', label: 'Cámaras IP' },
+  { slug: 'conectividad', label: 'Conectividad' },
+  { slug: 'fuentes_ups', label: 'Fuentes y UPS' },
+  { slug: 'grabadores', label: 'Grabadores' },
+  { slug: 'paneles_solares', label: 'Paneles solares' },
+  { slug: 'placa_madre', label: 'Placa madre' },
+  { slug: 'memoria_ram', label: 'Memoria RAM' },
+  { slug: 'gabinete', label: 'Gabinete' },
+  { slug: 'monitor', label: 'Monitor' },
+  { slug: 'perifericos', label: 'Periféricos' },
+  { slug: 'procesador', label: 'Procesador' },
+  { slug: 'placa_video', label: 'Placa de video' },
+  { slug: 'refrigeracion', label: 'Refrigeración' }
+];
+
+// Fábrica de controladores de productos: cada categoría (pestaña) tiene exactamente
+// la misma funcionalidad que la antigua pestaña única "Productos", pero acotada a su
+// propia categoría (filtro en el backend por `categoria` + sus propios elementos del DOM).
+function crearControladorProductos(categoria, label) {
+  return {
+    categoria,
+    label,
+    data: [],
+    async cargar() {
+      const q = document.getElementById('productosBuscar_' + this.categoria).value.trim();
+      const params = new URLSearchParams({ categoria: this.categoria });
+      if (q) params.set('q', q);
+      this.data = await API.get('/api/productos?' + params.toString());
+      this.pintar();
+    },
+    pintar() {
+      const grid = document.getElementById('productosGrid_' + this.categoria);
+      if (!this.data.length) {
+        grid.innerHTML = `<p style="color:var(--text-mute)">No hay productos todavía en esta categoría. Creá el primero con "+ Nuevo producto".</p>`;
+        return;
+      }
+      grid.innerHTML = this.data.map(p => `
+        <div class="prod-card">
+          ${p.imagen ? `<img class="prod-card-img" src="${p.imagen}">` : `<div class="prod-card-img">Sin imagen</div>`}
+          <div class="prod-card-body">
+            <div class="prod-card-name">${esc(p.nombre)}</div>
+            <div class="prod-card-price">${fmtUSD(p.precio_usd)} · ${fmtARS(p.precio_ars)}${p.recargo_pct ? ` <span style="color:var(--text-mute)">+${p.recargo_pct}%</span>` : ''}</div>
+            ${p.recargo_pct ? `<div class="prod-card-price"><strong style="color:var(--copper-dark)">${fmtARS(p.precio_final_ars)}</strong> <span style="color:var(--text-mute);font-size:11px">precio final</span></div>` : ''}
+            <span class="stock-badge ${p.stock_minimo > 0 && p.stock_actual <= p.stock_minimo ? 'bajo' : 'ok'}" style="width:fit-content">
+              Stock: ${p.stock_actual}
+            </span>
+          </div>
+          <div class="prod-card-actions">
+            ${p.codigo_barras ? `<button class="btn btn-ghost btn-sm" onclick='Barcode.mostrarSolo(${JSON.stringify(p.codigo_barras)}, ${JSON.stringify(p.nombre)})'>🏷 Código</button>` : ''}
+            <button class="btn btn-ghost btn-sm" onclick="ProductosCat['${this.categoria}'].editar(${p.id})">Editar</button>
+            <button class="btn btn-danger btn-sm" onclick="ProductosCat['${this.categoria}'].eliminar(${p.id})">Eliminar</button>
+          </div>
+        </div>
+      `).join('');
+    },
+    formHTML(p = {}, recargoDefault) {
+      const esNuevo = !p.id;
+      const recargoValor = esNuevo ? (recargoDefault ?? 0) : (p.recargo_pct ?? 0);
+      return `
+        <label>Nombre*<input id="p_nombre" value="${esc(p.nombre)}"></label>
+        <label>Código de barras (opcional)
+          <div style="display:flex;gap:8px">
+            <input id="p_codigo_barras" value="${esc(p.codigo_barras || '')}" placeholder="Escaneá o escribí un código">
+            <button type="button" class="btn btn-ghost btn-sm" onclick="ProductosCat['${this.categoria}'].generarCodigo()">Generar</button>
+          </div>
+        </label>
+        <div id="p_codigo_preview" style="margin:-4px 0 10px"></div>
+        <div class="form-grid">
+          <label>Precio de costo en USD*<input id="p_precio_usd" type="number" step="0.01" value="${p.precio_usd ?? ''}"></label>
+          <label>Recargo / ganancia (%)<input id="p_recargo" type="number" step="0.01" min="0" value="${recargoValor}"></label>
+        </div>
+        ${!esNuevo ? `<p class="hint">Precio base (costo convertido a ARS): <strong>${fmtARS(p.precio_ars)}</strong> · Precio final con recargo: <strong style="color:var(--copper-dark)">${fmtARS(p.precio_final_ars)}</strong></p>` : ''}
+        <div class="form-grid">
+          ${esNuevo ? `<label>Stock inicial<input id="p_stock_actual" type="number" min="0" step="1" value="0"></label>` : ''}
+          <label>Stock mínimo (para alertas)<input id="p_stock_minimo" type="number" min="0" step="1" value="${p.stock_minimo ?? 0}"></label>
+        </div>
+        <label>Imagen del producto
+          ${p.imagen ? `<img src="${p.imagen}" class="preview-img" style="margin-bottom:8px">` : ''}
+          <input id="p_imagen" type="file" accept="image/*">
+        </label>
+        <p class="hint">El precio en pesos argentinos se calcula automáticamente con la cotización oficial del dólar, y el recargo se suma sobre ese valor.${esNuevo ? '' : ' El stock actual se administra desde la pestaña "Stock" (entradas de mercadería, ventas, ajustes).'}</p>
+        <div class="modal-actions">
+          <button class="btn btn-ghost" onclick="Modal.cerrar()">Cancelar</button>
+          <button class="btn btn-primary" onclick="ProductosCat['${this.categoria}'].guardar(${p.id || 'null'})">Guardar</button>
+        </div>
+      `;
+    },
+    async abrirNuevo() {
+      let recargoDefault = 0;
+      try { const cfg = await API.get('/api/settings'); recargoDefault = Number(cfg.recargo_pct_default) || 0; } catch (e) {}
+      Modal.abrir('Nuevo producto — ' + this.label, this.formHTML({}, recargoDefault));
+      this.bindCodigoPreview();
+    },
+    editar(id) {
+      Modal.abrir('Editar producto — ' + this.label, this.formHTML(this.data.find(x => x.id === id)));
+      this.bindCodigoPreview();
+    },
+    bindCodigoPreview() {
+      const render = () => {
+        const codigo = val('p_codigo_barras');
+        const box = document.getElementById('p_codigo_preview');
+        if (!codigo) { box.innerHTML = ''; return; }
+        box.innerHTML = Barcode.svgSafe(codigo, { height: 45, moduleWidth: 1.6 }) +
+          `<div style="margin-top:4px"><button type="button" class="btn btn-ghost btn-sm" onclick='Barcode.imprimir(${JSON.stringify(codigo)}, ${JSON.stringify(val("p_nombre") || "Producto")})'>🖨 Imprimir etiqueta</button></div>`;
+      };
+      document.getElementById('p_codigo_barras').addEventListener('input', render);
+      render();
+    },
+    async generarCodigo() {
+      try {
+        const r = await API.get('/api/productos/generar-codigo/nuevo');
+        document.getElementById('p_codigo_barras').value = r.codigo;
+        document.getElementById('p_codigo_barras').dispatchEvent(new Event('input'));
+      } catch (e) { toast(e.message, true); }
+    },
+    imprimirEtiquetas() {
+      const conCodigo = this.data.filter(p => p.codigo_barras);
+      if (!conCodigo.length) return toast('Ningún producto tiene código de barras asignado todavía', true);
+      Barcode.imprimirVarios(conCodigo, 1);
+    },
+    async guardar(id) {
+      const nombre = val('p_nombre'); const precio_usd = val('p_precio_usd');
+      if (!nombre || !precio_usd) return toast('Nombre y precio en USD son obligatorios', true);
+      const fd = new FormData();
+      fd.append('nombre', nombre); fd.append('precio_usd', precio_usd);
+      fd.append('recargo_pct', val('p_recargo') || '0');
+      fd.append('codigo_barras', val('p_codigo_barras') || '');
+      fd.append('categoria', this.categoria);
+      if (!id) fd.append('stock_actual', val('p_stock_actual') || '0');
+      fd.append('stock_minimo', val('p_stock_minimo') || '0');
+      const file = document.getElementById('p_imagen').files[0];
+      if (file) fd.append('imagen', file);
+      try {
+        if (id) await API.put('/api/productos/' + id, fd, true);
+        else await API.post('/api/productos', fd, true);
+        Modal.cerrar(); toast('Producto guardado'); this.cargar(); cargarTasaBadge();
+      } catch (e) { toast(e.message, true); }
+    },
+    async eliminar(id) {
+      if (!confirm('¿Eliminar este producto?')) return;
+      try {
+        await API.del('/api/productos/' + id);
+        toast('Producto eliminado'); this.cargar();
+      } catch (e) { toast(e.message, true); }
+    },
+    async recalcular() {
+      try {
+        const r = await API.post('/api/productos/recalcular-todos', {});
+        toast(`Cotización actualizada (${r.actualizados} productos)`); this.cargar(); cargarTasaBadge();
+      } catch (e) { toast(e.message, true); }
     }
-    grid.innerHTML = this.data.map(p => `
-      <div class="prod-card">
-        ${p.imagen ? `<img class="prod-card-img" src="${p.imagen}">` : `<div class="prod-card-img">Sin imagen</div>`}
-        <div class="prod-card-body">
-          <div class="prod-card-name">${esc(p.nombre)}</div>
-          <div class="prod-card-price">${fmtUSD(p.precio_usd)} · ${fmtARS(p.precio_ars)}${p.recargo_pct ? ` <span style="color:var(--text-mute)">+${p.recargo_pct}%</span>` : ''}</div>
-          ${p.recargo_pct ? `<div class="prod-card-price"><strong style="color:var(--copper-dark)">${fmtARS(p.precio_final_ars)}</strong> <span style="color:var(--text-mute);font-size:11px">precio final</span></div>` : ''}
-          <span class="stock-badge ${p.stock_minimo > 0 && p.stock_actual <= p.stock_minimo ? 'bajo' : 'ok'}" style="width:fit-content">
-            Stock: ${p.stock_actual}
-          </span>
-        </div>
-        <div class="prod-card-actions">
-          ${p.codigo_barras ? `<button class="btn btn-ghost btn-sm" onclick='Barcode.mostrarSolo(${JSON.stringify(p.codigo_barras)}, ${JSON.stringify(p.nombre)})'>🏷 Código</button>` : ''}
-          <button class="btn btn-ghost btn-sm" onclick="Productos.editar(${p.id})">Editar</button>
-          <button class="btn btn-danger btn-sm" onclick="Productos.eliminar(${p.id})">Eliminar</button>
-        </div>
-      </div>
-    `).join('');
-  },
-  formHTML(p = {}, recargoDefault) {
-    const esNuevo = !p.id;
-    const recargoValor = esNuevo ? (recargoDefault ?? 0) : (p.recargo_pct ?? 0);
-    return `
-      <label>Nombre*<input id="p_nombre" value="${esc(p.nombre)}"></label>
-      <label>Código de barras (opcional)
-        <div style="display:flex;gap:8px">
-          <input id="p_codigo_barras" value="${esc(p.codigo_barras || '')}" placeholder="Escaneá o escribí un código">
-          <button type="button" class="btn btn-ghost btn-sm" onclick="Productos.generarCodigo()">Generar</button>
-        </div>
-      </label>
-      <div id="p_codigo_preview" style="margin:-4px 0 10px"></div>
-      <div class="form-grid">
-        <label>Precio de costo en USD*<input id="p_precio_usd" type="number" step="0.01" value="${p.precio_usd ?? ''}"></label>
-        <label>Recargo / ganancia (%)<input id="p_recargo" type="number" step="0.01" min="0" value="${recargoValor}"></label>
-      </div>
-      ${!esNuevo ? `<p class="hint">Precio base (costo convertido a ARS): <strong>${fmtARS(p.precio_ars)}</strong> · Precio final con recargo: <strong style="color:var(--copper-dark)">${fmtARS(p.precio_final_ars)}</strong></p>` : ''}
-      <div class="form-grid">
-        ${esNuevo ? `<label>Stock inicial<input id="p_stock_actual" type="number" min="0" step="1" value="0"></label>` : ''}
-        <label>Stock mínimo (para alertas)<input id="p_stock_minimo" type="number" min="0" step="1" value="${p.stock_minimo ?? 0}"></label>
-      </div>
-      <label>Imagen del producto
-        ${p.imagen ? `<img src="${p.imagen}" class="preview-img" style="margin-bottom:8px">` : ''}
-        <input id="p_imagen" type="file" accept="image/*">
-      </label>
-      <p class="hint">El precio en pesos argentinos se calcula automáticamente con la cotización oficial del dólar, y el recargo se suma sobre ese valor.${esNuevo ? '' : ' El stock actual se administra desde la pestaña "Stock" (entradas de mercadería, ventas, ajustes).'}</p>
-      <div class="modal-actions">
-        <button class="btn btn-ghost" onclick="Modal.cerrar()">Cancelar</button>
-        <button class="btn btn-primary" onclick="Productos.guardar(${p.id || 'null'})">Guardar</button>
-      </div>
-    `;
-  },
-  async abrirNuevo() {
-    let recargoDefault = 0;
-    try { const cfg = await API.get('/api/settings'); recargoDefault = Number(cfg.recargo_pct_default) || 0; } catch (e) {}
-    Modal.abrir('Nuevo producto', this.formHTML({}, recargoDefault));
-    this.bindCodigoPreview();
-  },
-  editar(id) {
-    Modal.abrir('Editar producto', this.formHTML(this.data.find(x => x.id === id)));
-    this.bindCodigoPreview();
-  },
-  bindCodigoPreview() {
-    const render = () => {
-      const codigo = val('p_codigo_barras');
-      const box = document.getElementById('p_codigo_preview');
-      if (!codigo) { box.innerHTML = ''; return; }
-      box.innerHTML = Barcode.svgSafe(codigo, { height: 45, moduleWidth: 1.6 }) +
-        `<div style="margin-top:4px"><button type="button" class="btn btn-ghost btn-sm" onclick='Barcode.imprimir(${JSON.stringify(codigo)}, ${JSON.stringify(val("p_nombre") || "Producto")})'>🖨 Imprimir etiqueta</button></div>`;
-    };
-    document.getElementById('p_codigo_barras').addEventListener('input', render);
-    render();
-  },
-  async generarCodigo() {
-    try {
-      const r = await API.get('/api/productos/generar-codigo/nuevo');
-      document.getElementById('p_codigo_barras').value = r.codigo;
-      document.getElementById('p_codigo_barras').dispatchEvent(new Event('input'));
-    } catch (e) { toast(e.message, true); }
-  },
-  imprimirEtiquetas() {
-    const conCodigo = this.data.filter(p => p.codigo_barras);
-    if (!conCodigo.length) return toast('Ningún producto tiene código de barras asignado todavía', true);
-    Barcode.imprimirVarios(conCodigo, 1);
-  },
-  async guardar(id) {
-    const nombre = val('p_nombre'); const precio_usd = val('p_precio_usd');
-    if (!nombre || !precio_usd) return toast('Nombre y precio en USD son obligatorios', true);
-    const fd = new FormData();
-    fd.append('nombre', nombre); fd.append('precio_usd', precio_usd);
-    fd.append('recargo_pct', val('p_recargo') || '0');
-    fd.append('codigo_barras', val('p_codigo_barras') || '');
-    if (!id) fd.append('stock_actual', val('p_stock_actual') || '0');
-    fd.append('stock_minimo', val('p_stock_minimo') || '0');
-    const file = document.getElementById('p_imagen').files[0];
-    if (file) fd.append('imagen', file);
-    try {
-      if (id) await API.put('/api/productos/' + id, fd, true);
-      else await API.post('/api/productos', fd, true);
-      Modal.cerrar(); toast('Producto guardado'); this.cargar(); cargarTasaBadge();
-    } catch (e) { toast(e.message, true); }
-  },
-  async eliminar(id) {
-    if (!confirm('¿Eliminar este producto?')) return;
-    try {
-      await API.del('/api/productos/' + id);
-      toast('Producto eliminado'); this.cargar();
-    } catch (e) { toast(e.message, true); }
-  },
-  async recalcular() {
-    try {
-      const r = await API.post('/api/productos/recalcular-todos', {});
-      toast(`Cotización actualizada (${r.actualizados} productos)`); this.cargar(); cargarTasaBadge();
-    } catch (e) { toast(e.message, true); }
-  }
-};
-document.getElementById('productosBuscar').addEventListener('input', debounce(() => Productos.cargar(), 300));
+  };
+}
+
+// Un controlador por categoría, ej: ProductosCat.cables, ProductosCat.alarmas, etc.
+const ProductosCat = {};
+CATEGORIAS_PRODUCTOS.forEach(c => { ProductosCat[c.slug] = crearControladorProductos(c.slug, c.label); });
+
+// usado desde Stock (entrada/ajuste) para refrescar la grilla de productos si la
+// pestaña de categoría correspondiente está siendo mostrada en ese momento
+function refrescarProductosCatActiva() {
+  const activo = document.querySelector('.tab-panel.active[id^="tab-prod_"]');
+  if (!activo) return;
+  const slug = activo.id.slice('tab-prod_'.length);
+  if (ProductosCat[slug]) ProductosCat[slug].cargar();
+}
+
+CATEGORIAS_PRODUCTOS.forEach(c => {
+  document.getElementById('productosBuscar_' + c.slug).addEventListener('input', debounce(() => ProductosCat[c.slug].cargar(), 300));
+
+  // Importar/exportar CSV: mismas columnas que la antigua pestaña Productos, filtrado por categoría.
+  ImportCSV.config['prod_' + c.slug] = {
+    titulo: `Importar productos — ${c.label} — desde CSV`,
+    endpoint: '/api/productos/import?categoria=' + encodeURIComponent(c.slug),
+    recargar: () => { ProductosCat[c.slug].cargar(); cargarTasaBadge(); },
+    columnas: [
+      ['nombre', 'obligatoria — si coincide con uno existente, lo actualiza'],
+      ['precio_usd', 'obligatoria (precio de costo en USD)'],
+      ['stock_actual', 'opcional (si el producto ya existe, se suma como entrada de mercadería)'],
+      ['stock_minimo', 'opcional'],
+      ['recargo_pct', 'opcional (% de ganancia)']
+    ],
+    ejemplo: 'nombre,precio_usd,stock_actual,stock_minimo,recargo_pct\nAuricular Bluetooth,15.50,10,2,40'
+  };
+  ExportCSV.endpoints['prod_' + c.slug] = '/api/productos/export?categoria=' + encodeURIComponent(c.slug);
+});
 
 // ============ STOCK ============
 const Stock = {
@@ -600,7 +649,7 @@ const Stock = {
     if (!cantidad || cantidad <= 0) return toast('Ingresá una cantidad válida', true);
     try {
       await API.post(`/api/productos/${id}/stock/entrada`, { cantidad, motivo: val('s_motivo') });
-      Modal.cerrar(); toast('Stock actualizado'); this.cargar(); Productos.cargar();
+      Modal.cerrar(); toast('Stock actualizado'); this.cargar(); refrescarProductosCatActiva();
     } catch (e) { toast(e.message, true); }
   },
   abrirAjuste(id) {
@@ -620,7 +669,7 @@ const Stock = {
     if (!cantidad) return toast('Ingresá una cantidad distinta de cero', true);
     try {
       await API.post(`/api/productos/${id}/stock/ajuste`, { cantidad, motivo: val('s_motivo2') });
-      Modal.cerrar(); toast('Stock ajustado'); this.cargar(); Productos.cargar();
+      Modal.cerrar(); toast('Stock ajustado'); this.cargar(); refrescarProductosCatActiva();
     } catch (e) { toast(e.message, true); }
   }
 };
@@ -1438,72 +1487,25 @@ const Backup = {
   }
 };
 
-// ============ BACKUP AUTOMÁTICO A GOOGLE DRIVE ============
-const DriveBackup = {
-  async cargar() {
-    try {
-      const e = await API.get('/api/drive/estado');
-      document.getElementById('drive_habilitado').checked = !!e.habilitado;
-      document.getElementById('drive_folder_id').value = e.folder_id || '';
-      document.getElementById('drive_intervalo_horas').value = e.intervalo_horas || 12;
-      document.getElementById('drive_mantener_cantidad').value = e.mantener_cantidad || 14;
+// ============ RESTABLECER VALORES DE FÁBRICA ============
+const FactoryReset = {
+  async ejecutar() {
+    const primero = confirm('Esto va a BORRAR TODOS los datos (clientes, productos, facturas, presupuestos, stock, agenda y cuentas de cobro) y todas las imágenes subidas (logo, fondo, fotos de producto), dejando la app como recién instalada. ¿Confirmás que querés continuar?');
+    if (!primero) return;
+    const segundo = confirm('Esta acción NO se puede deshacer. ¿Estás totalmente seguro de restablecer la app a valores de fábrica?');
+    if (!segundo) return;
 
-      const partes = [];
-      partes.push(e.configurado
-        ? `✓ Credenciales cargadas (${esc(e.email_cuenta_servicio)})`
-        : 'Todavía no subiste el archivo JSON de la cuenta de servicio.');
-      if (e.ultimo_backup) {
-        const fecha = new Date(e.ultimo_backup).toLocaleString('es-AR');
-        partes.push(e.ultimo_estado === 'error'
-          ? `Último intento (${fecha}) falló: ${e.ultimo_error}`
-          : `Último backup a Drive: ${fecha}`);
-      } else {
-        partes.push('Todavía no se hizo ningún backup a Drive.');
-      }
-      const estadoEl = document.getElementById('driveEstado');
-      estadoEl.innerHTML = partes.join('<br>');
-      estadoEl.className = 'hint' + (e.ultimo_estado === 'error' ? ' drive-estado-error' : e.ultimo_backup ? ' drive-estado-ok' : '');
-    } catch (e) { /* silencioso */ }
-  },
-  async subirCredenciales() {
-    const input = document.getElementById('drive_credenciales_file');
-    const file = input.files[0];
-    if (!file) return null;
-    const fd = new FormData();
-    fd.append('credenciales', file);
-    return API.post('/api/drive/credenciales', fd, true);
-  },
-  async guardar() {
+    const estado = document.getElementById('factoryResetEstado');
+    estado.textContent = 'Restableciendo, no cierres esta ventana...';
     try {
-      await this.subirCredenciales();
-      await API.put('/api/drive/config', {
-        habilitado: document.getElementById('drive_habilitado').checked,
-        folder_id: val('drive_folder_id'),
-        intervalo_horas: val('drive_intervalo_horas'),
-        mantener_cantidad: val('drive_mantener_cantidad')
-      });
-      toast('Configuración de Google Drive guardada');
-      document.getElementById('drive_credenciales_file').value = '';
-      this.cargar();
-    } catch (e) { toast(e.message, true); }
-  },
-  async probar() {
-    try {
-      await this.subirCredenciales();
-      await API.put('/api/drive/config', { folder_id: val('drive_folder_id') });
-      const r = await API.post('/api/drive/probar', {});
-      toast(`Conexión OK — carpeta "${r.carpeta}"`);
-      document.getElementById('drive_credenciales_file').value = '';
-      this.cargar();
-    } catch (e) { toast(e.message, true); }
-  },
-  async backupAhora() {
-    toast('Generando backup y subiéndolo a Drive...');
-    try {
-      const r = await API.post('/api/drive/backup-ahora', {});
-      toast(`Backup subido: ${r.filename}`);
-      this.cargar();
-    } catch (e) { toast(e.message, true); }
+      await API.post('/api/settings/reset-fabrica', {});
+      estado.textContent = '✓ La app se restableció a valores de fábrica. Recargando...';
+      toast('Valores de fábrica restablecidos');
+      setTimeout(() => location.reload(), 1500);
+    } catch (e) {
+      estado.textContent = '';
+      toast(e.message, true);
+    }
   }
 };
 
