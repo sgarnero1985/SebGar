@@ -409,7 +409,8 @@ const CATEGORIAS_PRODUCTOS = [
   { slug: 'perifericos', label: 'Periféricos' },
   { slug: 'procesador', label: 'Procesador' },
   { slug: 'placa_video', label: 'Placa de video' },
-  { slug: 'refrigeracion', label: 'Refrigeración' }
+  { slug: 'refrigeracion', label: 'Refrigeración' },
+  { slug: 'almacenamiento', label: 'Almacenamiento' }
 ];
 
 // Fábrica de controladores de productos: cada categoría (pestaña) tiene exactamente

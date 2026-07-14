@@ -97,6 +97,10 @@
         <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 12a4 4 0 1 1 4-4c0 2-1 3-4 4Z"/><path d="M12 12a4 4 0 1 1-4 4c0-2 1-3 4-4Z"/><path d="M12 12a4 4 0 1 1-4-4c2 0 3 1 4 4Z"/><path d="M12 12a4 4 0 1 1 4 4c-2 0-3-1-4-4Z"/><circle cx="12" cy="12" r="1"/></svg>
         <span>Refrigeración</span>
       </button>
+      <button class="tab-btn" data-tab="prod_almacenamiento">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="7" rx="1.5"/><rect x="2" y="13" width="20" height="7" rx="1.5"/><line x1="6" y1="7.5" x2="6.01" y2="7.5"/><line x1="6" y1="16.5" x2="6.01" y2="16.5"/></svg>
+        <span>Almacenamiento</span>
+      </button>
       <button class="tab-btn" data-tab="stock">
         <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="5" rx="1"/><path d="M4 8v11a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V8"/><path d="M10 13h4"/></svg>
         <span>Stock</span>
@@ -465,6 +469,23 @@
         <input type="search" id="productosBuscar_refrigeracion" placeholder="Buscar producto...">
       </div>
       <div id="productosGrid_refrigeracion" class="cards-grid"></div>
+    </section>
+
+    <section id="tab-prod_almacenamiento" class="tab-panel">
+      <header class="panel-header">
+        <h1>Almacenamiento</h1>
+        <div class="header-actions">
+          <button class="btn btn-ghost" onclick="ImportCSV.abrir('prod_almacenamiento')">⇪ Importar CSV</button>
+          <button class="btn btn-ghost" onclick="ExportCSV.descargar('prod_almacenamiento')">⇩ Exportar CSV</button>
+          <button class="btn btn-ghost" onclick="ProductosCat['almacenamiento'].imprimirEtiquetas()">🖨 Imprimir etiquetas</button>
+          <button class="btn btn-ghost" onclick="ProductosCat['almacenamiento'].recalcular()">↻ Actualizar cotización</button>
+          <button class="btn btn-primary" onclick="ProductosCat['almacenamiento'].abrirNuevo()">+ Nuevo producto</button>
+        </div>
+      </header>
+      <div class="toolbar">
+        <input type="search" id="productosBuscar_almacenamiento" placeholder="Buscar producto...">
+      </div>
+      <div id="productosGrid_almacenamiento" class="cards-grid"></div>
     </section>
 
     <!-- STOCK -->
