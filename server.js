@@ -15,6 +15,7 @@ app.use('/uploads', express.static(UPLOAD_DIR));
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.use('/api/clientes', require('./routes/clientes'));
+app.use('/api/proveedores', require('./routes/proveedores'));
 app.use('/api/productos', require('./routes/productos'));
 app.use('/api/mano-obra', require('./routes/manoobra'));
 app.use('/api/documentos', require('./routes/documentos'));
@@ -23,6 +24,7 @@ app.use('/api/pdf', require('./routes/pdf'));
 app.use('/api/balance', require('./routes/balance'));
 app.use('/api/turnos', require('./routes/turnos'));
 app.use('/api/cuentas-cobro', require('./routes/cuentas'));
+app.use('/api/ordenes-compra', require('./routes/ordenes'));
 app.use('/api/backup', require('./routes/backup'));
 
 app.get('/health', (req, res) => res.json({ ok: true }));

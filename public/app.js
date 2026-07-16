@@ -90,6 +90,8 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + tab));
   if (tab === 'clientes') Clientes.cargar();
+  if (tab === 'proveedores') Proveedores.cargar();
+  if (tab === 'compras') OrdenesCompra.cargar();
   if (tab.startsWith('prod_')) ProductosCat[tab.slice('prod_'.length)].cargar();
   if (tab === 'stock') Stock.cargar();
   if (tab === 'manoobra') ManoObra.cargar();
@@ -390,6 +392,318 @@ document.getElementById('clientesBuscar').addEventListener('input', debounce(() 
 
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 
+// ============ PROVEEDORES ============
+const Proveedores = {
+  data: [],
+  async cargar() {
+    const q = document.getElementById('proveedoresBuscar').value.trim();
+    this.data = await API.get('/api/proveedores' + (q ? '?q=' + encodeURIComponent(q) : ''));
+    this.pintar();
+  },
+  pintar() {
+    const tbody = document.getElementById('proveedoresTbody');
+    if (!this.data.length) {
+      tbody.innerHTML = `<tr class="empty-row"><td colspan="6">No hay proveedores todavía. Creá el primero con "+ Nuevo proveedor".</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = this.data.map(p => `
+      <tr>
+        <td>${esc(p.nombre)}</td>
+        <td>${esc(p.contacto || '—')}</td>
+        <td>${esc(p.telefono || '—')}</td>
+        <td>${esc(p.email || '—')}</td>
+        <td>${esc(p.cuit || '—')}</td>
+        <td class="row-actions">
+          <button class="btn btn-ghost btn-sm" onclick="Proveedores.editar(${p.id})">Editar</button>
+          <button class="btn btn-danger btn-sm" onclick="Proveedores.eliminar(${p.id})">Eliminar</button>
+        </td>
+      </tr>
+    `).join('');
+  },
+  formHTML(p = {}) {
+    return `
+      <div class="form-grid">
+        <label>Nombre / razón social*<input id="pr_nombre" value="${esc(p.nombre)}"></label>
+        <label>Persona de contacto<input id="pr_contacto" value="${esc(p.contacto)}"></label>
+        <label>Teléfono<input id="pr_telefono" value="${esc(p.telefono)}"></label>
+        <label>Email<input id="pr_email" type="email" value="${esc(p.email)}"></label>
+        <label>CUIT<input id="pr_cuit" value="${esc(p.cuit)}"></label>
+        <label>Dirección<input id="pr_direccion" value="${esc(p.direccion)}"></label>
+      </div>
+      <label>Notas<textarea id="pr_notas" rows="2">${esc(p.notas)}</textarea></label>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="Modal.cerrar()">Cancelar</button>
+        <button class="btn btn-primary" onclick="Proveedores.guardar(${p.id || 'null'})">Guardar</button>
+      </div>
+    `;
+  },
+  abrirNuevo() { Modal.abrir('Nuevo proveedor', this.formHTML()); },
+  editar(id) {
+    const p = this.data.find(x => x.id === id);
+    Modal.abrir('Editar proveedor', this.formHTML(p));
+  },
+  async guardar(id) {
+    const body = {
+      nombre: val('pr_nombre'), contacto: val('pr_contacto'), telefono: val('pr_telefono'),
+      email: val('pr_email'), cuit: val('pr_cuit'), direccion: val('pr_direccion'),
+      notas: document.getElementById('pr_notas').value.trim()
+    };
+    if (!body.nombre) return toast('El nombre del proveedor es obligatorio', true);
+    try {
+      if (id) await API.put('/api/proveedores/' + id, body);
+      else await API.post('/api/proveedores', body);
+      Modal.cerrar(); toast('Proveedor guardado'); this.cargar();
+    } catch (e) { toast(e.message, true); }
+  },
+  async eliminar(id) {
+    if (!confirm('¿Eliminar este proveedor? Los productos que lo tengan asignado quedarán sin proveedor.')) return;
+    try {
+      await API.del('/api/proveedores/' + id);
+      toast('Proveedor eliminado'); this.cargar();
+    } catch (e) { toast(e.message, true); }
+  }
+};
+document.getElementById('proveedoresBuscar').addEventListener('input', debounce(() => Proveedores.cargar(), 300));
+ImportCSV.config.proveedores = {
+  titulo: 'Importar proveedores desde CSV',
+  endpoint: '/api/proveedores/import',
+  recargar: () => Proveedores.cargar(),
+  columnas: [
+    ['nombre', 'obligatoria — si coincide con uno existente, actualiza ese proveedor'],
+    ['contacto', 'opcional'],
+    ['telefono', 'opcional'],
+    ['email', 'opcional'],
+    ['direccion', 'opcional'],
+    ['cuit', 'opcional'],
+    ['notas', 'opcional']
+  ],
+  ejemplo: 'nombre,contacto,telefono,email,cuit\nDistribuidora Norte,Juan Gómez,1155551234,ventas@distnorte.com,30111222333'
+};
+ExportCSV.endpoints.proveedores = '/api/proveedores/export';
+
+// ============ ÓRDENES DE COMPRA ============
+const OrdenesCompra = {
+  data: [],
+  state: { proveedor_id: null, items: [], notas: '' },
+  editingId: null,
+  _prodCache: [],
+
+  async cargar() {
+    const estado = document.getElementById('comprasEstado').value;
+    this.data = await API.get('/api/ordenes-compra' + (estado ? '?estado=' + estado : ''));
+    this.pintar();
+  },
+  labelEstado(e) { return { pendiente: 'Pendiente', recibida: '✓ Recibida', cancelada: 'Cancelada' }[e] || e; },
+  pintar() {
+    const tbody = document.getElementById('comprasTbody');
+    if (!this.data.length) {
+      tbody.innerHTML = `<tr class="empty-row"><td colspan="6">No hay órdenes de compra todavía. Creá la primera con "+ Nueva orden de compra".</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = this.data.map(o => `
+      <tr>
+        <td>#${o.numero}</td>
+        <td>${esc(o.proveedor ? o.proveedor.nombre : '—')}</td>
+        <td>${new Date(o.fecha).toLocaleDateString('es-AR')}</td>
+        <td>${fmtUSD(o.total_usd)}</td>
+        <td><span class="estado-badge ${o.estado}">${this.labelEstado(o.estado)}</span></td>
+        <td class="row-actions">
+          <button class="btn btn-ghost btn-sm" onclick="OrdenesCompra.verDetalle(${o.id})">Ver</button>
+          ${o.estado === 'pendiente' ? `<button class="btn btn-ghost btn-sm" onclick="OrdenesCompra.abrirEditar(${o.id})">Editar</button>` : ''}
+          ${o.estado === 'pendiente' ? `<button class="btn btn-primary btn-sm" onclick="OrdenesCompra.recibir(${o.id})">Marcar recibida</button>` : ''}
+          ${o.estado === 'pendiente' ? `<button class="btn btn-ghost btn-sm" onclick="OrdenesCompra.cancelar(${o.id})">Cancelar</button>` : ''}
+          ${o.estado !== 'recibida' ? `<button class="btn btn-danger btn-sm" onclick="OrdenesCompra.eliminar(${o.id})">Eliminar</button>` : ''}
+        </td>
+      </tr>
+    `).join('');
+  },
+
+  async abrirNueva() {
+    this.editingId = null;
+    this.state = { proveedor_id: null, items: [], notas: '' };
+    let proveedores = [];
+    try { proveedores = await API.get('/api/proveedores'); } catch (e) {}
+    if (!proveedores.length) return toast('Primero cargá al menos un proveedor en la pestaña Proveedores', true);
+    Modal.abrir('Nueva orden de compra', this.formHTML(proveedores));
+    this.bindEvents();
+  },
+  async abrirEditar(id) {
+    const o = this.data.find(x => x.id === id);
+    this.editingId = id;
+    this.state = { proveedor_id: o.proveedor_id, items: o.items.map(it => ({ ...it })), notas: o.notas || '' };
+    let proveedores = [];
+    try { proveedores = await API.get('/api/proveedores'); } catch (e) {}
+    Modal.abrir('Editar orden de compra #' + o.numero, this.formHTML(proveedores));
+    this.bindEvents();
+  },
+
+  formHTML(proveedores) {
+    const s = this.state;
+    return `
+      <label>Proveedor*
+        <select id="oc_proveedor">
+          <option value="">Elegí un proveedor</option>
+          ${proveedores.map(p => `<option value="${p.id}" ${s.proveedor_id === p.id ? 'selected' : ''}>${esc(p.nombre)}</option>`).join('')}
+        </select>
+      </label>
+
+      <div class="divider"></div>
+      <div class="doc-section-title">Agregar producto del catálogo</div>
+      <input type="search" id="oc_prodBuscar" placeholder="Buscar producto por nombre...">
+      <div id="oc_prodResultados" class="search-results" style="display:none"></div>
+
+      <div class="divider"></div>
+      <div class="doc-section-title">O agregar un ítem manual (sin producto cargado, ej: flete, servicio)</div>
+      <div class="form-grid cols-3">
+        <label>Descripción<input id="oc_manualDesc" placeholder="Ej: Flete"></label>
+        <label>Cantidad<input id="oc_manualCant" type="number" min="1" step="1" value="1"></label>
+        <label>Precio unit. USD<input id="oc_manualPrecio" type="number" min="0" step="0.01" value="0"></label>
+      </div>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="OrdenesCompra.agregarManual()">+ Agregar ítem manual</button>
+
+      <table class="items-table" style="margin-top:14px">
+        <thead><tr><th>Ítem</th><th>Cant.</th><th>P. Unit. USD</th><th>Total</th><th></th></tr></thead>
+        <tbody id="oc_itemsTbody"></tbody>
+      </table>
+
+      <div class="summary-row total" style="margin-top:8px"><span>TOTAL USD</span><span id="oc_total">${fmtUSD(0)}</span></div>
+
+      <label>Notas<textarea id="oc_notas" rows="2">${esc(s.notas || '')}</textarea></label>
+
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="Modal.cerrar()">Cancelar</button>
+        <button class="btn btn-primary" onclick="OrdenesCompra.guardar()">${this.editingId ? 'Guardar cambios' : 'Crear orden'}</button>
+      </div>
+    `;
+  },
+
+  bindEvents() {
+    document.getElementById('oc_prodBuscar').addEventListener('input', debounce(async (e) => {
+      const q = e.target.value.trim();
+      const box = document.getElementById('oc_prodResultados');
+      if (!q) { box.style.display = 'none'; return; }
+      const results = await API.get('/api/productos?q=' + encodeURIComponent(q));
+      this._prodCache = results;
+      box.style.display = results.length ? 'block' : 'none';
+      box.innerHTML = results.map(p => `
+        <div class="search-result-item" onclick="OrdenesCompra.agregarProducto(${p.id})">
+          <span>${esc(p.nombre)}</span><span class="price">${fmtUSD(p.precio_usd)}</span>
+        </div>`).join('');
+    }, 250));
+    this.pintarItems();
+    this.recalcularTotal();
+  },
+
+  agregarProducto(id) {
+    const p = this._prodCache.find(x => x.id === id);
+    if (!p) return;
+    const existente = this.state.items.find(it => it.producto_id === id);
+    if (existente) existente.cantidad += 1;
+    else this.state.items.push({ producto_id: p.id, nombre: p.nombre, cantidad: 1, precio_usd: p.precio_usd });
+    document.getElementById('oc_prodResultados').style.display = 'none';
+    document.getElementById('oc_prodBuscar').value = '';
+    this.pintarItems(); this.recalcularTotal();
+  },
+  agregarManual() {
+    const desc = val('oc_manualDesc');
+    const cant = Number(document.getElementById('oc_manualCant').value) || 0;
+    const precio = Number(document.getElementById('oc_manualPrecio').value) || 0;
+    if (!desc || cant <= 0) return toast('Ingresá una descripción y una cantidad válida', true);
+    this.state.items.push({ producto_id: null, nombre: desc, cantidad: cant, precio_usd: precio });
+    document.getElementById('oc_manualDesc').value = '';
+    document.getElementById('oc_manualCant').value = 1;
+    document.getElementById('oc_manualPrecio').value = 0;
+    this.pintarItems(); this.recalcularTotal();
+  },
+  quitarItem(idx) { this.state.items.splice(idx, 1); this.pintarItems(); this.recalcularTotal(); },
+  cambiarCantidad(idx, value) {
+    this.state.items[idx].cantidad = Math.max(1, Number(value) || 1);
+    this.pintarItems(); this.recalcularTotal();
+  },
+  cambiarPrecio(idx, value) {
+    this.state.items[idx].precio_usd = Math.max(0, Number(value) || 0);
+    this.pintarItems(); this.recalcularTotal();
+  },
+
+  pintarItems() {
+    const tbody = document.getElementById('oc_itemsTbody');
+    const items = this.state.items;
+    if (!items.length) {
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--text-mute)">Buscá un producto o agregá un ítem manual arriba</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = items.map((it, idx) => `
+      <tr>
+        <td>${esc(it.nombre)}${!it.producto_id ? ' <span style="color:var(--text-mute);font-size:11px">(manual)</span>' : ''}</td>
+        <td><input type="number" min="1" value="${it.cantidad}" style="width:70px" onchange="OrdenesCompra.cambiarCantidad(${idx}, this.value)"></td>
+        <td><input type="number" min="0" step="0.01" value="${it.precio_usd}" style="width:90px" onchange="OrdenesCompra.cambiarPrecio(${idx}, this.value)"></td>
+        <td>${fmtUSD(it.cantidad * it.precio_usd)}</td>
+        <td><button class="btn btn-danger btn-sm" onclick="OrdenesCompra.quitarItem(${idx})">✕</button></td>
+      </tr>
+    `).join('');
+  },
+  recalcularTotal() {
+    const total = this.state.items.reduce((acc, it) => acc + it.cantidad * it.precio_usd, 0);
+    document.getElementById('oc_total').textContent = fmtUSD(total);
+  },
+
+  async guardar() {
+    const proveedor_id = Number(document.getElementById('oc_proveedor').value) || null;
+    if (!proveedor_id) return toast('Elegí un proveedor', true);
+    if (!this.state.items.length) return toast('Agregá al menos un ítem', true);
+    const notas = document.getElementById('oc_notas').value.trim();
+    const body = { proveedor_id, items: this.state.items, notas };
+    try {
+      if (this.editingId) await API.put('/api/ordenes-compra/' + this.editingId, body);
+      else await API.post('/api/ordenes-compra', body);
+      Modal.cerrar(); toast('Orden de compra guardada'); this.cargar();
+    } catch (e) { toast(e.message, true); }
+  },
+
+  verDetalle(id) {
+    const o = this.data.find(x => x.id === id);
+    Modal.abrir(`Orden de compra #${o.numero}`, `
+      <p><strong>Proveedor:</strong> ${esc(o.proveedor ? o.proveedor.nombre : '—')}</p>
+      <p><strong>Fecha:</strong> ${new Date(o.fecha).toLocaleString('es-AR')}</p>
+      <p><strong>Estado:</strong> <span class="estado-badge ${o.estado}">${this.labelEstado(o.estado)}</span></p>
+      <table class="items-table">
+        <thead><tr><th>Ítem</th><th>Cant.</th><th>P. Unit. USD</th><th>Total</th></tr></thead>
+        <tbody>
+          ${o.items.map(it => `<tr><td>${esc(it.nombre)}</td><td>${it.cantidad}</td><td>${fmtUSD(it.precio_usd)}</td><td>${fmtUSD(it.cantidad * it.precio_usd)}</td></tr>`).join('')}
+        </tbody>
+      </table>
+      <div class="summary-row total" style="margin-top:8px"><span>TOTAL USD</span><span>${fmtUSD(o.total_usd)}</span></div>
+      ${o.notas ? `<p class="hint" style="margin-top:10px">Notas: ${esc(o.notas)}</p>` : ''}
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="Modal.cerrar()">Cerrar</button>
+      </div>
+    `);
+  },
+
+  async recibir(id) {
+    if (!confirm('Esto suma automáticamente la mercadería al stock de cada producto de la orden. ¿Confirmás que ya la recibiste?')) return;
+    try {
+      await API.post(`/api/ordenes-compra/${id}/recibir`, {});
+      toast('Orden recibida, stock actualizado'); this.cargar(); refrescarProductosCatActiva(); Stock.actualizarAlertas();
+    } catch (e) { toast(e.message, true); }
+  },
+  async cancelar(id) {
+    if (!confirm('¿Cancelar esta orden de compra?')) return;
+    try {
+      await API.post(`/api/ordenes-compra/${id}/cancelar`, {});
+      toast('Orden cancelada'); this.cargar();
+    } catch (e) { toast(e.message, true); }
+  },
+  async eliminar(id) {
+    if (!confirm('¿Eliminar esta orden de compra?')) return;
+    try {
+      await API.del('/api/ordenes-compra/' + id);
+      toast('Orden eliminada'); this.cargar();
+    } catch (e) { toast(e.message, true); }
+  }
+};
+document.getElementById('comprasEstado').addEventListener('change', () => OrdenesCompra.cargar());
+
 // ============ PRODUCTOS ============
 const CATEGORIAS_PRODUCTOS = [
   { slug: 'accesorios', label: 'Accesorios' },
@@ -444,6 +758,7 @@ function crearControladorProductos(categoria, label) {
             <span class="stock-badge ${p.stock_minimo > 0 && p.stock_actual <= p.stock_minimo ? 'bajo' : 'ok'}" style="width:fit-content">
               Stock: ${p.stock_actual}
             </span>
+            ${p.proveedor_nombre ? `<div class="hint" style="margin-top:2px">Proveedor: ${esc(p.proveedor_nombre)}</div>` : ''}
           </div>
           <div class="prod-card-actions">
             ${p.codigo_barras ? `<button class="btn btn-ghost btn-sm" onclick='Barcode.mostrarSolo(${JSON.stringify(p.codigo_barras)}, ${JSON.stringify(p.nombre)})'>🏷 Código</button>` : ''}
@@ -453,11 +768,17 @@ function crearControladorProductos(categoria, label) {
         </div>
       `).join('');
     },
-    formHTML(p = {}, recargoDefault) {
+    formHTML(p = {}, recargoDefault, proveedores = []) {
       const esNuevo = !p.id;
       const recargoValor = esNuevo ? (recargoDefault ?? 0) : (p.recargo_pct ?? 0);
       return `
         <label>Nombre*<input id="p_nombre" value="${esc(p.nombre)}"></label>
+        <label>Proveedor (opcional)
+          <select id="p_proveedor_id">
+            <option value="">Sin proveedor asignado</option>
+            ${proveedores.map(pr => `<option value="${pr.id}" ${p.proveedor_id === pr.id ? 'selected' : ''}>${esc(pr.nombre)}</option>`).join('')}
+          </select>
+        </label>
         <label>Código de barras (opcional)
           <div style="display:flex;gap:8px">
             <input id="p_codigo_barras" value="${esc(p.codigo_barras || '')}" placeholder="Escaneá o escribí un código">
@@ -488,11 +809,15 @@ function crearControladorProductos(categoria, label) {
     async abrirNuevo() {
       let recargoDefault = 0;
       try { const cfg = await API.get('/api/settings'); recargoDefault = Number(cfg.recargo_pct_default) || 0; } catch (e) {}
-      Modal.abrir('Nuevo producto — ' + this.label, this.formHTML({}, recargoDefault));
+      let proveedores = [];
+      try { proveedores = await API.get('/api/proveedores'); } catch (e) {}
+      Modal.abrir('Nuevo producto — ' + this.label, this.formHTML({}, recargoDefault, proveedores));
       this.bindCodigoPreview();
     },
-    editar(id) {
-      Modal.abrir('Editar producto — ' + this.label, this.formHTML(this.data.find(x => x.id === id)));
+    async editar(id) {
+      let proveedores = [];
+      try { proveedores = await API.get('/api/proveedores'); } catch (e) {}
+      Modal.abrir('Editar producto — ' + this.label, this.formHTML(this.data.find(x => x.id === id), undefined, proveedores));
       this.bindCodigoPreview();
     },
     bindCodigoPreview() {
@@ -526,6 +851,7 @@ function crearControladorProductos(categoria, label) {
       fd.append('recargo_pct', val('p_recargo') || '0');
       fd.append('codigo_barras', val('p_codigo_barras') || '');
       fd.append('categoria', this.categoria);
+      fd.append('proveedor_id', val('p_proveedor_id') || '');
       if (!id) fd.append('stock_actual', val('p_stock_actual') || '0');
       fd.append('stock_minimo', val('p_stock_minimo') || '0');
       const file = document.getElementById('p_imagen').files[0];

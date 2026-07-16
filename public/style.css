@@ -239,6 +239,15 @@ input[type=color].color-input {
 }
 .stock-badge.ok { background: rgba(46,125,91,0.12); color: var(--ok); }
 .stock-badge.bajo { background: rgba(179,64,46,0.12); color: var(--danger); }
+
+/* Órdenes de compra */
+.estado-badge {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700;
+  padding: 3px 9px; border-radius: 20px;
+}
+.estado-badge.pendiente { background: rgba(201,113,61,0.14); color: var(--copper-dark); }
+.estado-badge.recibida { background: rgba(46,125,91,0.12); color: var(--ok); }
+.estado-badge.cancelada { background: rgba(107,117,128,0.14); color: var(--text-mute); }
 .alert-banner {
   background: rgba(179,64,46,0.08); border: 1px solid rgba(179,64,46,0.25); color: var(--danger);
   border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; font-size: 13.5px; display: none;

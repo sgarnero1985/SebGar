@@ -6,7 +6,7 @@ const db = require('./db');
 const UPLOAD_ROOT = process.env.UPLOAD_DIR || path.join(__dirname, 'uploads');
 
 // Orden de restauración: primero las tablas "independientes", después las que referencian a otras.
-const TABLAS = ['clientes', 'productos', 'mano_obra', 'stock_movimientos', 'documentos', 'turnos', 'cuentas_cobro', 'settings'];
+const TABLAS = ['clientes', 'proveedores', 'productos', 'mano_obra', 'stock_movimientos', 'documentos', 'turnos', 'cuentas_cobro', 'ordenes_compra', 'settings'];
 
 function construirBackupBuffer() {
   const data = { version: 1, exportado: new Date().toISOString() };

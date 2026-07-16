@@ -25,6 +25,18 @@ db.exec(`
     creado TEXT DEFAULT (datetime('now'))
   );
 
+  CREATE TABLE IF NOT EXISTS proveedores (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nombre TEXT NOT NULL,
+    contacto TEXT,
+    telefono TEXT,
+    email TEXT,
+    direccion TEXT,
+    cuit TEXT,
+    notas TEXT,
+    creado TEXT DEFAULT (datetime('now'))
+  );
+
   CREATE TABLE IF NOT EXISTS productos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     nombre TEXT NOT NULL,
@@ -36,6 +48,20 @@ db.exec(`
     recargo_pct REAL NOT NULL DEFAULT 0,
     categoria TEXT,
     creado TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS ordenes_compra (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    numero INTEGER UNIQUE,
+    proveedor_id INTEGER NOT NULL,
+    fecha TEXT DEFAULT (datetime('now')),
+    estado TEXT NOT NULL DEFAULT 'pendiente',   -- pendiente | recibida | cancelada
+    items TEXT NOT NULL,                        -- JSON array: [{producto_id, nombre, cantidad, precio_usd}]
+    notas TEXT,
+    total_usd REAL NOT NULL DEFAULT 0,
+    creado TEXT DEFAULT (datetime('now')),
+    actualizado TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY(proveedor_id) REFERENCES proveedores(id)
   );
 
   CREATE TABLE IF NOT EXISTS stock_movimientos (
@@ -130,6 +156,9 @@ if (!columnaExiste('productos', 'codigo_barras')) {
 if (!columnaExiste('productos', 'categoria')) {
   db.exec(`ALTER TABLE productos ADD COLUMN categoria TEXT`);
 }
+if (!columnaExiste('productos', 'proveedor_id')) {
+  db.exec(`ALTER TABLE productos ADD COLUMN proveedor_id INTEGER REFERENCES proveedores(id)`);
+}
 db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_productos_codigo_barras ON productos(codigo_barras) WHERE codigo_barras IS NOT NULL AND codigo_barras != ''`);
 
 // valores por defecto
@@ -163,6 +192,6 @@ for (const [k, v] of Object.entries(defaults)) {
 }
 
 db.DEFAULT_SETTINGS = defaults;
-db.TABLAS_DATOS = ['stock_movimientos', 'documentos', 'turnos', 'clientes', 'productos', 'mano_obra', 'cuentas_cobro'];
+db.TABLAS_DATOS = ['stock_movimientos', 'documentos', 'turnos', 'clientes', 'productos', 'mano_obra', 'cuentas_cobro', 'ordenes_compra', 'proveedores'];
 
 module.exports = db;

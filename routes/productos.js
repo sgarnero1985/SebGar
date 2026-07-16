@@ -9,11 +9,14 @@ const { parseCSV, pick, toCSV } = require('../utils/csv');
 const router = express.Router();
 
 // agrega precio_final_ars (precio_ars + recargo_pct) a cada producto sin guardarlo en la DB,
-// así siempre queda consistente si cambia la cotización o el recargo.
+// así siempre queda consistente si cambia la cotización o el recargo. También agrega
+// proveedor_nombre (si el producto tiene un proveedor asignado) para mostrarlo sin otro pedido.
+const getProveedorNombre = db.prepare('SELECT nombre FROM proveedores WHERE id = ?');
 function conPrecioFinal(row) {
   if (!row) return row;
   const final = row.precio_ars * (1 + (row.recargo_pct || 0) / 100);
-  return { ...row, precio_final_ars: Math.round(final * 100) / 100 };
+  const proveedor = row.proveedor_id ? getProveedorNombre.get(row.proveedor_id) : null;
+  return { ...row, precio_final_ars: Math.round(final * 100) / 100, proveedor_nombre: proveedor ? proveedor.nombre : null };
 }
 function conPrecioFinalLista(rows) { return rows.map(conPrecioFinal); }
 
@@ -41,16 +44,14 @@ const uploadCsv = multer({ storage: multer.memoryStorage(), limits: { fileSize: 
 router.get('/', (req, res) => {
   const q = (req.query.q || '').trim();
   const categoria = (req.query.categoria || '').trim();
-  let rows;
-  if (categoria && q) {
-    rows = db.prepare('SELECT * FROM productos WHERE categoria = ? AND (nombre LIKE ? OR codigo_barras LIKE ?) ORDER BY id DESC').all(categoria, `%${q}%`, `%${q}%`);
-  } else if (categoria) {
-    rows = db.prepare('SELECT * FROM productos WHERE categoria = ? ORDER BY id DESC').all(categoria);
-  } else if (q) {
-    rows = db.prepare('SELECT * FROM productos WHERE nombre LIKE ? OR codigo_barras LIKE ? ORDER BY id DESC').all(`%${q}%`, `%${q}%`);
-  } else {
-    rows = db.prepare('SELECT * FROM productos ORDER BY id DESC').all();
-  }
+  const proveedorId = (req.query.proveedor_id || '').trim();
+  let sql = 'SELECT * FROM productos WHERE 1=1';
+  const params = [];
+  if (categoria) { sql += ' AND categoria = ?'; params.push(categoria); }
+  if (proveedorId) { sql += ' AND proveedor_id = ?'; params.push(Number(proveedorId)); }
+  if (q) { sql += ' AND (nombre LIKE ? OR codigo_barras LIKE ?)'; params.push(`%${q}%`, `%${q}%`); }
+  sql += ' ORDER BY id DESC';
+  const rows = db.prepare(sql).all(...params);
   res.json(conPrecioFinalLista(rows));
 });
 
@@ -111,11 +112,15 @@ router.get('/:id', (req, res) => {
 
 router.post('/', upload.single('imagen'), async (req, res) => {
   try {
-    const { nombre, precio_usd, stock_actual, stock_minimo, recargo_pct, codigo_barras, categoria } = req.body;
+    const { nombre, precio_usd, stock_actual, stock_minimo, recargo_pct, codigo_barras, categoria, proveedor_id } = req.body;
     if (!nombre || precio_usd === undefined) return res.status(400).json({ error: 'Nombre y precio en USD son obligatorios' });
     const codigo = (codigo_barras || '').trim() || null;
     if (codigo && db.prepare('SELECT 1 FROM productos WHERE codigo_barras = ?').get(codigo)) {
       return res.status(409).json({ error: 'Ese código de barras ya está asignado a otro producto' });
+    }
+    const provId = proveedor_id ? Number(proveedor_id) : null;
+    if (provId && !db.prepare('SELECT 1 FROM proveedores WHERE id = ?').get(provId)) {
+      return res.status(400).json({ error: 'El proveedor seleccionado no existe' });
     }
     const precio_ars = await currency.convertirUsdArs(precio_usd);
     const imagen = req.file ? `/uploads/products/${req.file.filename}` : null;
@@ -124,8 +129,8 @@ router.post('/', upload.single('imagen'), async (req, res) => {
     const recargo = Number(recargo_pct) || 0;
     const cat = (categoria || '').trim() || null;
     const info = db.prepare(`
-      INSERT INTO productos (nombre, imagen, precio_usd, precio_ars, stock_actual, stock_minimo, recargo_pct, codigo_barras, categoria) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(nombre, imagen, Number(precio_usd), precio_ars, stockInicial, stockMinimo, recargo, codigo, cat);
+      INSERT INTO productos (nombre, imagen, precio_usd, precio_ars, stock_actual, stock_minimo, recargo_pct, codigo_barras, categoria, proveedor_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(nombre, imagen, Number(precio_usd), precio_ars, stockInicial, stockMinimo, recargo, codigo, cat, provId);
     if (stockInicial > 0) {
       db.prepare(`INSERT INTO stock_movimientos (producto_id, tipo, cantidad, motivo) VALUES (?, 'entrada', ?, 'Stock inicial')`)
         .run(info.lastInsertRowid, stockInicial);
@@ -141,13 +146,20 @@ router.put('/:id', upload.single('imagen'), async (req, res) => {
   try {
     const existing = db.prepare('SELECT * FROM productos WHERE id = ?').get(req.params.id);
     if (!existing) return res.status(404).json({ error: 'No encontrado' });
-    const { nombre, precio_usd, stock_minimo, recargo_pct, codigo_barras, categoria } = req.body;
+    const { nombre, precio_usd, stock_minimo, recargo_pct, codigo_barras, categoria, proveedor_id } = req.body;
     let codigo = existing.codigo_barras;
     if (codigo_barras !== undefined) {
       codigo = (codigo_barras || '').trim() || null;
       if (codigo && codigo !== existing.codigo_barras) {
         const dup = db.prepare('SELECT id FROM productos WHERE codigo_barras = ? AND id != ?').get(codigo, req.params.id);
         if (dup) return res.status(409).json({ error: 'Ese código de barras ya está asignado a otro producto' });
+      }
+    }
+    let provId = existing.proveedor_id;
+    if (proveedor_id !== undefined) {
+      provId = proveedor_id ? Number(proveedor_id) : null;
+      if (provId && !db.prepare('SELECT 1 FROM proveedores WHERE id = ?').get(provId)) {
+        return res.status(400).json({ error: 'El proveedor seleccionado no existe' });
       }
     }
     const usd = precio_usd !== undefined ? Number(precio_usd) : existing.precio_usd;
@@ -163,8 +175,8 @@ router.put('/:id', upload.single('imagen'), async (req, res) => {
       }
       imagen = `/uploads/products/${req.file.filename}`;
     }
-    db.prepare('UPDATE productos SET nombre=?, imagen=?, precio_usd=?, precio_ars=?, stock_minimo=?, recargo_pct=?, codigo_barras=?, categoria=? WHERE id=?')
-      .run(nombre ?? existing.nombre, imagen, usd, precio_ars, stockMinimo, recargo, codigo, cat, req.params.id);
+    db.prepare('UPDATE productos SET nombre=?, imagen=?, precio_usd=?, precio_ars=?, stock_minimo=?, recargo_pct=?, codigo_barras=?, categoria=?, proveedor_id=? WHERE id=?')
+      .run(nombre ?? existing.nombre, imagen, usd, precio_ars, stockMinimo, recargo, codigo, cat, provId, req.params.id);
     const row = db.prepare('SELECT * FROM productos WHERE id = ?').get(req.params.id);
     res.json(conPrecioFinal(row));
   } catch (e) {
